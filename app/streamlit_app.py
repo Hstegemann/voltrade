@@ -124,15 +124,6 @@ if page == "Data Processing":
     
     else:
         st.info("👆 Upload your merged dataset to begin")
-        
-        # Option to load the file directly if it exists
-        if st.button("Load merged_multi_asset_dataset_20250714_112740.csv"):
-            try:
-                df = pd.read_csv('merged_multi_asset_dataset_20250714_112740.csv')
-                st.success("File loaded from disk!")
-                st.experimental_rerun()
-            except:
-                st.error("File not found in current directory")
 
 elif page == "Analysis":
     st.header("📈 Data Analysis")
