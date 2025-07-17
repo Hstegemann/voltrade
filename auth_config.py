@@ -1,3 +1,4 @@
+# auth_config.py
 """
 Authentication Configuration for ML Volatility Trading Model
 ⚠️ IMPORTANT: Change these credentials before deploying!
@@ -22,11 +23,6 @@ USERS = {
 }
 
 # Option 2: Use environment variables (for production)
-# Set these in your deployment environment:
-# export ADMIN_PASSWORD="your_secure_admin_password"
-# export TRADER_PASSWORD="your_secure_trader_password"
-# etc.
-
 USERS_FROM_ENV = {
     "admin": hash_password(os.getenv("ADMIN_PASSWORD", "VixTrading2025!")),
     "trader": hash_password(os.getenv("TRADER_PASSWORD", "TradingSecure123")),
@@ -76,44 +72,3 @@ SHOW_DEMO_CREDENTIALS = not PRODUCTION_MODE
 
 # Enable logging of authentication attempts
 LOG_AUTH_ATTEMPTS = True
-
-# =====================================================================
-# QUICK SETUP GUIDE
-# =====================================================================
-"""
-QUICK SETUP INSTRUCTIONS:
-
-1. CHANGE PASSWORDS:
-   - Update the passwords in USERS dictionary above
-   - Use strong passwords with letters, numbers, and symbols
-   - Each user should have a unique password
-
-2. FOR PRODUCTION DEPLOYMENT:
-   - Set USE_ENVIRONMENT_VARIABLES = True
-   - Set PRODUCTION_MODE = True
-   - Define environment variables:
-     export ADMIN_PASSWORD="your_very_secure_admin_password"
-     export TRADER_PASSWORD="your_secure_trader_password"
-     export ANALYST_PASSWORD="your_secure_analyst_password"
-
-3. CUSTOMIZE PERMISSIONS:
-   - Modify USER_PERMISSIONS to match your needs
-   - Available permissions: upload, train, download, view, manage
-
-4. SECURITY:
-   - Use HTTPS in production
-   - Set strong passwords
-   - Monitor authentication logs
-   - Regular password updates
-
-EXAMPLE STRONG PASSWORDS:
-- Admin: "Tr4d1ng$ecuRe2025!"
-- Trader: "V1x@nalyst#987"
-- Analyst: "D4ta$c1ence&ML"
-
-Demo Login Credentials:
-- Username: admin | Password: VixTrading2025!
-- Username: trader | Password: TradingSecure123
-- Username: analyst | Password: AnalysisView456
-- Username: james | Password: YourPersonalPass
-"""

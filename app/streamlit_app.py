@@ -21,13 +21,6 @@ from sklearn.metrics import classification_report, roc_auc_score, confusion_matr
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-# Import authentication configuration
-try:
-    from auth_config import FINAL_USERS, USER_PERMISSIONS, SHOW_DEMO_CREDENTIALS, PRODUCTION_MODE
-except ImportError:
-    st.error("❌ auth_config.py not found! Please create the authentication configuration file.")
-    st.stop()
-
 warnings.filterwarnings('ignore')
 
 # Set page config
@@ -39,11 +32,37 @@ st.set_page_config(
 )
 
 # =====================================================================
-# AUTHENTICATION SYSTEM (Updated to use auth_config.py)
+# EMBEDDED AUTHENTICATION CONFIGURATION
+# =====================================================================
+
+def hash_password(password):
+    """Hash password using SHA256"""
+    return hashlib.sha256(str.encode(password)).hexdigest()
+
+# User credentials (embedded for Streamlit Cloud compatibility)
+FINAL_USERS = {
+    "admin": hash_password("VixTrading2025!"),       # Full access admin
+    "trader": hash_password("TradingSecure123"),     # Trading access
+    "analyst": hash_password("AnalysisView456"),     # View-only access
+    "james": hash_password("YourPersonalPass"),      # Your personal account
+}
+
+USER_PERMISSIONS = {
+    "admin": ["upload", "train", "download", "view", "manage"],
+    "trader": ["upload", "train", "view", "download"],
+    "analyst": ["view", "download"],
+    "james": ["upload", "train", "download", "view", "manage"],  # Your full access
+}
+
+PRODUCTION_MODE = False
+SHOW_DEMO_CREDENTIALS = not PRODUCTION_MODE
+
+# =====================================================================
+# AUTHENTICATION SYSTEM
 # =====================================================================
 
 class AuthenticationManager:
-    """Authentication system using auth_config.py"""
+    """Authentication system with embedded credentials"""
     
     def __init__(self):
         self.users = FINAL_USERS
@@ -111,7 +130,7 @@ def show_login_page():
                 - **analyst** / AnalysisView456 (view only)
                 - **james** / YourPersonalPass (full access)
                 
-                *⚠️ Change these passwords in auth_config.py before production!*
+                *⚠️ Change these passwords before production!*
                 """)
         
         if PRODUCTION_MODE:
@@ -152,17 +171,17 @@ def require_permission(permission):
     return True
 
 # =====================================================================
-# EXISTING CLASSES (VIX Futures, Feature Engineer, Model Trainer)
+# DATA GENERATION AND ML CLASSES
 # =====================================================================
 
 class VIXFuturesSimplifier:
-    """Simplified version of your VIX futures simplifier for demo data"""
+    """Simplified version for demo data generation"""
     
     def __init__(self):
         pass
     
     def create_synthetic_data(self, n_points=10000):
-        """Create synthetic data similar to your simplified dataset structure"""
+        """Create synthetic VIX and volatility ETF data"""
         np.random.seed(42)
         
         # Generate timestamps (1-minute data)
@@ -226,7 +245,7 @@ class VIXFuturesSimplifier:
         return df
 
 class FeatureEngineer:
-    """Enhanced version of your feature engineering"""
+    """Feature engineering for volatility trading"""
     
     def __init__(self, data_df):
         self.df = data_df.copy()
@@ -322,7 +341,7 @@ class FeatureEngineer:
         return all_features
 
 class ModelTrainer:
-    """Model training class based on your Phase 4 code"""
+    """Model training class"""
     
     def __init__(self):
         self.models = {}
@@ -453,19 +472,10 @@ class ModelTrainer:
         return results
 
 # =====================================================================
-# MAIN APP WITH AUTHENTICATION
+# MAIN STREAMLIT APP
 # =====================================================================
 
-# Check authentication status
-if 'authenticated' not in st.session_state:
-    st.session_state.authenticated = False
-
-# If not authenticated, show login page
-if not st.session_state.authenticated:
-    show_login_page()
-    st.stop()  # Stop execution here
-
-# If authenticated, show the main app
+# CSS styling
 st.markdown("""
 <style>
     .main-header {
@@ -507,7 +517,16 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Title
+# Check authentication status
+if 'authenticated' not in st.session_state:
+    st.session_state.authenticated = False
+
+# If not authenticated, show login page
+if not st.session_state.authenticated:
+    show_login_page()
+    st.stop()  # Stop execution here
+
+# If authenticated, show the main app
 st.markdown('<h1 class="main-header">📈 ML Volatility Trading Model</h1>', unsafe_allow_html=True)
 
 # Sidebar navigation
@@ -529,7 +548,7 @@ if 'model_results' not in st.session_state:
     st.session_state.model_results = None
 
 # =====================================================================
-# PAGE 1: DATA PROCESSING (with permission check)
+# PAGE CONTENT
 # =====================================================================
 
 if page == "📊 Data Processing":
@@ -538,14 +557,14 @@ if page == "📊 Data Processing":
     # Data source selection
     data_source = st.radio(
         "Select Data Source:",
-        ["🎲 Generate Demo Data", "📁 Upload Your Files", "🗂️ Use Existing Processed Data"]
+        ["🎲 Generate Demo Data", "📁 Upload Your Files"]
     )
     
     if data_source == "🎲 Generate Demo Data":
         st.markdown("""
         <div class="info-box">
         <h4>Demo Data Generation</h4>
-        <p>This will create synthetic market data similar to your VIX futures simplifier output:</p>
+        <p>This will create synthetic market data for testing:</p>
         <ul>
             <li>VIX spot prices (mean-reverting)</li>
             <li>VIXY ETF prices (with realistic decay)</li>
@@ -580,8 +599,7 @@ if page == "📊 Data Processing":
             # Plot the data
             fig = make_subplots(
                 rows=2, cols=2,
-                subplot_titles=['VIX Level', 'VIXY Price', 'SPX Index', 'HYG vs TLT'],
-                vertical_spacing=0.1
+                subplot_titles=['VIX Level', 'VIXY Price', 'SPX Index', 'HYG vs TLT']
             )
             
             # Sample data for plotting (last 1000 points)
@@ -648,34 +666,6 @@ if page == "📊 Data Processing":
                 
             except Exception as e:
                 st.error(f"Error loading file: {str(e)}")
-    
-    elif data_source == "🗂️ Use Existing Processed Data":
-        st.markdown("### Load Previously Processed Data")
-        
-        # Look for CSV files in current directory
-        import glob
-        csv_files = glob.glob("*.csv")
-        
-        if csv_files:
-            selected_file = st.selectbox("Select a file:", csv_files)
-            
-            if st.button("Load Selected File"):
-                try:
-                    data = pd.read_csv(selected_file, index_col=0, parse_dates=True)
-                    st.session_state.processed_data = data
-                    st.success(f"✅ Loaded {len(data):,} rows from {selected_file}!")
-                    
-                    # Show preview
-                    st.dataframe(data.head())
-                    
-                except Exception as e:
-                    st.error(f"Error loading file: {str(e)}")
-        else:
-            st.info("No CSV files found in current directory.")
-
-# =====================================================================
-# PAGE 2: FEATURE ENGINEERING
-# =====================================================================
 
 elif page == "🔧 Feature Engineering":
     st.markdown('<h2 class="sub-header">🔧 Feature Engineering</h2>', unsafe_allow_html=True)
@@ -760,10 +750,6 @@ elif page == "🔧 Feature Engineering":
                         if len(valid_data) > 0:
                             up_pct = valid_data.mean() * 100
                             st.write(f"**{resp_col}**: {up_pct:.1f}% up moves, {100-up_pct:.1f}% down moves")
-
-# =====================================================================
-# PAGE 3: MODEL TRAINING (with permission check)
-# =====================================================================
 
 elif page == "🤖 Model Training":
     st.markdown('<h2 class="sub-header">🤖 Model Training</h2>', unsafe_allow_html=True)
@@ -880,10 +866,6 @@ elif page == "🤖 Model Training":
                         
                         st.markdown(f"**🏆 Best Model**: {best_model} (ROC-AUC: {best_auc:.4f})")
 
-# =====================================================================
-# PAGE 4: ANALYSIS & RESULTS (with permission check)
-# =====================================================================
-
 elif page == "📈 Analysis & Results":
     st.markdown('<h2 class="sub-header">📈 Analysis & Results</h2>', unsafe_allow_html=True)
     
@@ -916,7 +898,7 @@ elif page == "📈 Analysis & Results":
             st.metric("Best Model", best_model)
         
         # Detailed results
-        tabs = st.tabs(["📊 Performance Comparison", "🎯 Feature Importance", "📈 Predictions", "💾 Download Models"])
+        tabs = st.tabs(["📊 Performance Comparison", "🎯 Feature Importance", "📈 Predictions"])
         
         with tabs[0]:
             st.markdown("#### ROC Curves")
@@ -1002,71 +984,12 @@ elif page == "📈 Analysis & Results":
             )
             
             st.plotly_chart(fig, use_container_width=True)
-        
-        with tabs[3]:
-            # Check download permission
-            if not require_permission("download"):
-                st.error("❌ Download permission required to access trained models.")
-            else:
-                st.markdown("#### Download Trained Models")
-                
-                # Model download
-                for model_name, result in results.items():
-                    col1, col2 = st.columns([3, 1])
-                    
-                    with col1:
-                        st.write(f"**{model_name}**")
-                        st.write(f"ROC-AUC: {result['roc_auc']:.4f}")
-                    
-                    with col2:
-                        # Create model pickle
-                        model_data = {
-                            'model': result['model'],
-                            'scaler': trainer.scaler,
-                            'feature_names': trainer.feature_names,
-                            'target_col': target_col,
-                            'performance': result['roc_auc']
-                        }
-                        
-                        model_pickle = pickle.dumps(model_data)
-                        
-                        st.download_button(
-                            label="📥 Download",
-                            data=model_pickle,
-                            file_name=f"{model_name.lower().replace(' ', '_')}_model.pkl",
-                            mime="application/octet-stream"
-                        )
-                
-                # Results summary download
-                st.markdown("#### Download Results Summary")
-                
-                summary = {
-                    'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                    'target_variable': target_col,
-                    'user': st.session_state.username,
-                    'models': {}
-                }
-                
-                for model_name, result in results.items():
-                    summary['models'][model_name] = {
-                        'roc_auc': result['roc_auc'],
-                        'accuracy': float((result['predictions'] == trainer.y_test).mean())
-                    }
-                
-                summary_json = json.dumps(summary, indent=2)
-                
-                st.download_button(
-                    label="📊 Download Results Summary",
-                    data=summary_json,
-                    file_name="model_results_summary.json",
-                    mime="application/json"
-                )
 
 # Footer
 st.markdown("---")
 st.markdown(f"""
 <div style="text-align: center; color: #666; padding: 1rem;">
     <p>🔒 Secure ML Volatility Trading Model | User: {st.session_state.username}</p>
-    <p>Production Mode: {'✅' if PRODUCTION_MODE else '❌'} | Session Time: {st.session_state.get('login_time', 'Unknown')}</p>
+    <p>Session Time: {st.session_state.get('login_time', 'Unknown')}</p>
 </div>
 """, unsafe_allow_html=True)
