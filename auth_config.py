@@ -2,7 +2,6 @@
 Authentication Configuration for ML Volatility Trading Model
 ⚠️ IMPORTANT: Change these credentials before deploying!
 """
-
 import hashlib
 import os
 
@@ -81,7 +80,6 @@ LOG_AUTH_ATTEMPTS = True
 # =====================================================================
 # QUICK SETUP GUIDE
 # =====================================================================
-
 """
 QUICK SETUP INSTRUCTIONS:
 
@@ -112,4 +110,10 @@ EXAMPLE STRONG PASSWORDS:
 - Admin: "Tr4d1ng$ecuRe2025!"
 - Trader: "V1x@nalyst#987"
 - Analyst: "D4ta$c1ence&ML"
+
+Demo Login Credentials:
+- Username: admin | Password: VixTrading2025!
+- Username: trader | Password: TradingSecure123
+- Username: analyst | Password: AnalysisView456
+- Username: james | Password: YourPersonalPass
 """
