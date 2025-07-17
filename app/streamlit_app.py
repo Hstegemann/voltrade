@@ -10,6 +10,13 @@ import zipfile
 from io import BytesIO
 import plotly.express as px
 import plotly.graph_objects as go
+from sklearn.model_selection import TimeSeriesSplit
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score
+import warnings
+warnings.filterwarnings('ignore')
 
 # Configure page
 st.set_page_config(
@@ -40,8 +47,11 @@ class DataManager:
     def load_metadata(self):
         """Load dataset metadata"""
         if os.path.exists(self.metadata_file):
-            with open(self.metadata_file, 'r') as f:
-                return json.load(f)
+            try:
+                with open(self.metadata_file, 'r') as f:
+                    return json.load(f)
+            except:
+                pass
         return {"shared_datasets": {}, "user_datasets": {}}
     
     def save_metadata(self):
@@ -235,6 +245,35 @@ def create_sample_datasets():
     
     return sample_file, df
 
+def show_progress_tracker():
+    """Show project progress in sidebar"""
+    with st.sidebar:
+        st.markdown("---")
+        st.header("📋 Project Progress")
+        
+        progress_data = {
+            "✅ Phase 1: Environment Setup": 100,
+            "✅ Phase 2: Data Integration": 100, 
+            "🔄 Phase 3: Feature Engineering": 85,
+            "🔄 Phase 4: Model Development": 60,
+            "❌ Phase 5: Model Evaluation": 20,
+            "❌ Phase 6: Backtesting": 0,
+            "❌ Phase 7: Live Trading": 0
+        }
+        
+        for phase, progress in progress_data.items():
+            st.write(phase)
+            st.progress(progress / 100)
+        
+        overall_progress = sum(progress_data.values()) / len(progress_data)
+        st.metric("Overall Progress", f"{overall_progress:.0f}%")
+        
+        st.markdown("**🎯 Next Steps:**")
+        st.write("• Fix single-class target issue")
+        st.write("• Complete feature engineering")
+        st.write("• Train multiple models")
+        st.write("• Implement backtesting")
+
 def main():
     """Main application"""
     
@@ -255,7 +294,7 @@ def main():
         
         page = st.selectbox(
             "Choose Section:",
-            ["📊 Data Overview", "📤 Upload Data", "📥 Browse Datasets", "🔬 Data Analysis", "⚙️ Admin Panel"]
+            ["📊 Data Overview", "📤 Upload Data", "📥 Browse Datasets", "🔬 Data Analysis", "🤖 ML Pipeline", "⚙️ Admin Panel"]
         )
         
         # User info
@@ -265,6 +304,9 @@ def main():
             for key in st.session_state.keys():
                 del st.session_state[key]
             st.rerun()
+        
+        # Progress tracker
+        show_progress_tracker()
     
     # Page routing
     if page == "📊 Data Overview":
@@ -275,6 +317,8 @@ def main():
         show_browse_page(data_manager)
     elif page == "🔬 Data Analysis":
         show_analysis_page(data_manager)
+    elif page == "🤖 ML Pipeline":
+        show_ml_pipeline(data_manager)
     elif page == "⚙️ Admin Panel":
         show_admin_panel(data_manager)
 
@@ -282,10 +326,32 @@ def show_data_overview(data_manager):
     """Show overview of all available datasets"""
     st.header("📊 Data Overview")
     
-    # Statistics
+    # Quick setup if no data exists
     shared_datasets = data_manager.get_shared_datasets()
     user_datasets = data_manager.get_user_datasets(st.session_state['current_user'])
     
+    if not shared_datasets and not user_datasets:
+        st.info("No datasets found. Let's set up some sample data!")
+        
+        if st.button("🧪 Create Sample Volatility Data"):
+            with st.spinner("Creating sample dataset..."):
+                sample_file, sample_df = create_sample_datasets()
+                
+                success, message = data_manager.upload_shared_dataset(
+                    sample_file, "Sample VIX SPX Data", 
+                    "Sample volatility dataset with VIX, SPX, VIXY data for testing ML models",
+                    st.session_state['current_user']
+                )
+                
+                if success:
+                    st.success(message)
+                    st.balloons()
+                    st.rerun()
+                else:
+                    st.error(message)
+        return
+    
+    # Statistics
     col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("Shared Datasets", len(shared_datasets))
@@ -297,23 +363,45 @@ def show_data_overview(data_manager):
         st.metric("Total Data Size", f"{total_size:.1f} MB")
     
     # Recent uploads
-    st.subheader("📈 Recent Shared Datasets")
-    if shared_datasets:
-        for filename, metadata in list(shared_datasets.items())[-5:]:
-            with st.expander(f"📁 {metadata['name']}"):
-                col1, col2 = st.columns([2, 1])
-                with col1:
-                    st.write(f"**Description:** {metadata['description']}")
-                    st.write(f"**Uploader:** {metadata['uploader']}")
-                    st.write(f"**Shape:** {metadata['shape'][0]:,} rows × {metadata['shape'][1]} columns")
-                with col2:
-                    st.write(f"**Size:** {metadata['file_size_mb']:.1f} MB")
-                    st.write(f"**Date:** {metadata['upload_date'][:10]}")
-                    if st.button(f"Load {metadata['name']}", key=f"load_{filename}"):
-                        st.session_state['selected_dataset'] = ('shared', filename)
-                        st.success(f"Dataset '{metadata['name']}' loaded!")
-    else:
-        st.info("No shared datasets available. Upload the first one!")
+    st.subheader("📈 Available Datasets")
+    
+    tab1, tab2 = st.tabs(["🌐 Shared Datasets", "👤 My Datasets"])
+    
+    with tab1:
+        if shared_datasets:
+            for filename, metadata in shared_datasets.items():
+                with st.expander(f"📁 {metadata['name']}"):
+                    col1, col2 = st.columns([2, 1])
+                    with col1:
+                        st.write(f"**Description:** {metadata['description']}")
+                        st.write(f"**Uploader:** {metadata['uploader']}")
+                        st.write(f"**Shape:** {metadata['shape'][0]:,} rows × {metadata['shape'][1]} columns")
+                    with col2:
+                        st.write(f"**Size:** {metadata['file_size_mb']:.1f} MB")
+                        st.write(f"**Date:** {metadata['upload_date'][:10]}")
+                        if st.button(f"📥 Load", key=f"load_shared_{filename}"):
+                            st.session_state['selected_dataset'] = ('shared', filename)
+                            st.success(f"Dataset '{metadata['name']}' loaded!")
+                            st.rerun()
+        else:
+            st.info("No shared datasets available.")
+    
+    with tab2:
+        if user_datasets:
+            for filename, metadata in user_datasets.items():
+                with st.expander(f"📁 {metadata['name']}"):
+                    col1, col2 = st.columns([2, 1])
+                    with col1:
+                        st.write(f"**Upload Date:** {metadata['upload_date'][:10]}")
+                        st.write(f"**Shape:** {metadata['shape'][0]:,} rows × {metadata['shape'][1]} columns")
+                    with col2:
+                        st.write(f"**Size:** {metadata['file_size_mb']:.1f} MB")
+                        if st.button(f"📥 Load", key=f"load_user_{filename}"):
+                            st.session_state['selected_dataset'] = ('user', filename)
+                            st.success(f"Dataset '{metadata['name']}' loaded!")
+                            st.rerun()
+        else:
+            st.info("You haven't uploaded any personal datasets yet.")
 
 def show_upload_page(data_manager):
     """Show data upload interface"""
@@ -509,6 +597,15 @@ def show_analysis_page(data_manager):
     # Check if dataset is loaded
     if 'selected_dataset' not in st.session_state:
         st.warning("Please load a dataset first from the Browse Datasets page.")
+        
+        # Show available datasets
+        shared_datasets = data_manager.get_shared_datasets()
+        if shared_datasets:
+            st.subheader("📥 Quick Load")
+            for filename, metadata in list(shared_datasets.items())[:3]:
+                if st.button(f"Load: {metadata['name']}", key=f"quick_load_{filename}"):
+                    st.session_state['selected_dataset'] = ('shared', filename)
+                    st.rerun()
         return
     
     dataset_type, filename = st.session_state['selected_dataset']
@@ -567,37 +664,36 @@ def show_analysis_page(data_manager):
         
         if numeric_cols:
             # Time series plots
-            if len(numeric_cols) > 0:
-                selected_cols = st.multiselect(
-                    "Select columns to plot:",
-                    numeric_cols,
-                    default=numeric_cols[:3] if len(numeric_cols) >= 3 else numeric_cols
-                )
+            selected_cols = st.multiselect(
+                "Select columns to plot:",
+                numeric_cols,
+                default=numeric_cols[:3] if len(numeric_cols) >= 3 else numeric_cols
+            )
+            
+            if selected_cols:
+                fig = go.Figure()
+                for col in selected_cols:
+                    sample_data = df[col].head(1000) if len(df) > 1000 else df[col]
+                    fig.add_trace(go.Scatter(
+                        y=sample_data,
+                        name=col,
+                        mode='lines'
+                    ))
                 
-                if selected_cols:
-                    fig = go.Figure()
-                    for col in selected_cols:
-                        fig.add_trace(go.Scatter(
-                            y=df[col].head(1000),  # Limit for performance
-                            name=col,
-                            mode='lines'
-                        ))
-                    
-                    fig.update_layout(
-                        title="Time Series Plot",
-                        xaxis_title="Time Index",
-                        yaxis_title="Value",
-                        height=500
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
+                fig.update_layout(
+                    title="Time Series Plot",
+                    xaxis_title="Time Index",
+                    yaxis_title="Value",
+                    height=500
+                )
+                st.plotly_chart(fig, use_container_width=True)
             
             # Distribution plots
             st.subheader("📊 Distributions")
-            if len(numeric_cols) > 0:
-                selected_col = st.selectbox("Select column for distribution:", numeric_cols)
-                
-                fig = px.histogram(df, x=selected_col, title=f"Distribution of {selected_col}")
-                st.plotly_chart(fig, use_container_width=True)
+            selected_col = st.selectbox("Select column for distribution:", numeric_cols)
+            
+            fig = px.histogram(df.head(10000), x=selected_col, title=f"Distribution of {selected_col}")
+            st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("No numeric columns found for visualization.")
     
@@ -620,7 +716,7 @@ def show_analysis_page(data_manager):
             if not missing_df.empty:
                 st.dataframe(missing_df)
                 
-                # Missing data heatmap
+                # Missing data chart
                 fig = px.bar(missing_df, x='Column', y='Missing %', 
                            title="Missing Data by Column")
                 st.plotly_chart(fig, use_container_width=True)
@@ -633,7 +729,9 @@ def show_analysis_page(data_manager):
         st.subheader("📈 Correlation Analysis")
         
         if len(numeric_cols) > 1:
-            corr_matrix = df[numeric_cols].corr()
+            # Sample data for large datasets
+            sample_df = df.head(5000) if len(df) > 5000 else df
+            corr_matrix = sample_df[numeric_cols].corr()
             
             fig = px.imshow(
                 corr_matrix,
@@ -663,6 +761,241 @@ def show_analysis_page(data_manager):
                 st.info("No high correlations (>0.7) found.")
         else:
             st.info("Need at least 2 numeric columns for correlation analysis.")
+
+def show_ml_pipeline(data_manager):
+    """Show ML pipeline interface"""
+    st.header("🤖 ML Pipeline")
+    
+    # Check if dataset is loaded
+    if 'selected_dataset' not in st.session_state:
+        st.warning("Please load a dataset first from the Browse Datasets page.")
+        return
+    
+    dataset_type, filename = st.session_state['selected_dataset']
+    
+    # Load dataset
+    if dataset_type == 'shared':
+        df = data_manager.load_shared_dataset(filename)
+        metadata = data_manager.get_shared_datasets()[filename]
+    else:
+        df = data_manager.load_user_dataset(st.session_state['current_user'], filename)
+        metadata = data_manager.get_user_datasets(st.session_state['current_user'])[filename]
+    
+    if df is None:
+        st.error("Could not load dataset.")
+        return
+    
+    st.success(f"🤖 ML Pipeline for: **{metadata['name']}**")
+    
+    # Pipeline tabs
+    tab1, tab2, tab3, tab4 = st.tabs(["⚙️ Feature Engineering", "🎯 Target Creation", "🤖 Model Training", "📊 Results"])
+    
+    with tab1:
+        st.subheader("⚙️ Feature Engineering")
+        
+        numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+        
+        if not numeric_cols:
+            st.error("No numeric columns found for feature engineering.")
+            return
+        
+        st.write("**Available numeric columns:**")
+        st.write(numeric_cols)
+        
+        # Basic features
+        if st.button("🔧 Create Basic Features"):
+            with st.spinner("Creating features..."):
+                feature_df = df.copy()
+                
+                # Lagged returns for first few numeric columns
+                for col in numeric_cols[:3]:
+                    if col in feature_df.columns:
+                        for lag in [5, 15, 30]:
+                            if len(feature_df) > lag:
+                                feature_df[f'{col}_return_{lag}'] = np.log(feature_df[col] / feature_df[col].shift(lag))
+                
+                # Simple moving averages
+                for col in numeric_cols[:3]:
+                    if col in feature_df.columns:
+                        feature_df[f'{col}_MA_20'] = feature_df[col].rolling(20).mean()
+                        feature_df[f'{col}_vs_MA'] = feature_df[col] / feature_df[f'{col}_MA_20'] - 1
+                
+                st.session_state['feature_df'] = feature_df
+                st.success(f"Created {feature_df.shape[1] - df.shape[1]} new features!")
+                st.dataframe(feature_df.head())
+    
+    with tab2:
+        st.subheader("🎯 Target Variable Creation")
+        
+        if 'feature_df' not in st.session_state:
+            st.warning("Please create features first.")
+            return
+        
+        feature_df = st.session_state['feature_df']
+        
+        # Select target column
+        target_candidates = [col for col in feature_df.columns if any(x in col.lower() for x in ['vix', 'vixy', 'close'])]
+        
+        if not target_candidates:
+            target_candidates = feature_df.select_dtypes(include=[np.number]).columns.tolist()[:5]
+        
+        target_col = st.selectbox("Select column for target creation:", target_candidates)
+        
+        prediction_horizon = st.slider("Prediction horizon (periods ahead):", 1, 60, 15)
+        
+        if st.button("🎯 Create Target Variable"):
+            # Create binary target
+            future_returns = np.log(feature_df[target_col].shift(-prediction_horizon) / feature_df[target_col])
+            binary_target = (future_returns > 0).astype(int)
+            
+            feature_df[f'target_{prediction_horizon}'] = binary_target
+            
+            st.session_state['feature_df'] = feature_df
+            st.session_state['target_col'] = f'target_{prediction_horizon}'
+            
+            # Show target distribution
+            target_dist = binary_target.value_counts()
+            st.write("**Target Distribution:**")
+            st.write(target_dist)
+            
+            if len(target_dist) < 2:
+                st.error("⚠️ Target has only one class! Try different prediction horizon or column.")
+            else:
+                st.success("✅ Binary target created successfully!")
+    
+    with tab3:
+        st.subheader("🤖 Model Training")
+        
+        if 'feature_df' not in st.session_state or 'target_col' not in st.session_state:
+            st.warning("Please create features and target first.")
+            return
+        
+        feature_df = st.session_state['feature_df']
+        target_col = st.session_state['target_col']
+        
+        # Select features for training
+        feature_cols = [col for col in feature_df.columns if 'return_' in col or 'MA' in col or 'vs_' in col]
+        
+        if not feature_cols:
+            feature_cols = feature_df.select_dtypes(include=[np.number]).columns.tolist()
+            feature_cols = [col for col in feature_cols if col != target_col][:10]
+        
+        selected_features = st.multiselect(
+            "Select features for training:",
+            feature_cols,
+            default=feature_cols[:5] if len(feature_cols) >= 5 else feature_cols
+        )
+        
+        if st.button("🚀 Train Models") and selected_features:
+            with st.spinner("Training models..."):
+                try:
+                    # Prepare data
+                    X = feature_df[selected_features].dropna()
+                    y = feature_df.loc[X.index, target_col]
+                    
+                    # Check for sufficient data and classes
+                    if len(X) < 100:
+                        st.error("Not enough data points after removing NaN values.")
+                        return
+                    
+                    if len(y.unique()) < 2:
+                        st.error("Target variable has only one class.")
+                        return
+                    
+                    # Train/test split (time series aware)
+                    split_point = int(len(X) * 0.8)
+                    X_train, X_test = X.iloc[:split_point], X.iloc[split_point:]
+                    y_train, y_test = y.iloc[:split_point], y.iloc[split_point:]
+                    
+                    # Scale features
+                    scaler = StandardScaler()
+                    X_train_scaled = scaler.fit_transform(X_train)
+                    X_test_scaled = scaler.transform(X_test)
+                    
+                    # Train models
+                    models = {
+                        'Logistic Regression': LogisticRegression(random_state=42),
+                        'Random Forest': RandomForestClassifier(n_estimators=50, random_state=42)
+                    }
+                    
+                    results = {}
+                    
+                    for name, model in models.items():
+                        model.fit(X_train_scaled, y_train)
+                        y_pred = model.predict(X_test_scaled)
+                        y_pred_proba = model.predict_proba(X_test_scaled)[:, 1]
+                        
+                        auc = roc_auc_score(y_test, y_pred_proba)
+                        
+                        results[name] = {
+                            'model': model,
+                            'auc': auc,
+                            'predictions': y_pred,
+                            'probabilities': y_pred_proba
+                        }
+                    
+                    st.session_state['ml_results'] = results
+                    st.session_state['test_data'] = (X_test, y_test)
+                    st.session_state['scaler'] = scaler
+                    
+                    st.success("✅ Models trained successfully!")
+                    
+                    # Show results
+                    col1, col2 = st.columns(2)
+                    for i, (name, result) in enumerate(results.items()):
+                        with [col1, col2][i]:
+                            st.metric(f"{name} AUC", f"{result['auc']:.3f}")
+                
+                except Exception as e:
+                    st.error(f"Training failed: {str(e)}")
+    
+    with tab4:
+        st.subheader("📊 Model Results")
+        
+        if 'ml_results' not in st.session_state:
+            st.warning("Please train models first.")
+            return
+        
+        results = st.session_state['ml_results']
+        X_test, y_test = st.session_state['test_data']
+        
+        # Model comparison
+        st.subheader("🏆 Model Performance")
+        
+        perf_data = []
+        for name, result in results.items():
+            perf_data.append({
+                'Model': name,
+                'AUC Score': result['auc'],
+                'Accuracy': np.mean(result['predictions'] == y_test)
+            })
+        
+        perf_df = pd.DataFrame(perf_data).sort_values('AUC Score', ascending=False)
+        st.dataframe(perf_df)
+        
+        # Best model details
+        best_model_name = perf_df.iloc[0]['Model']
+        best_result = results[best_model_name]
+        
+        st.subheader(f"📈 {best_model_name} - Detailed Results")
+        
+        # Classification report
+        report = classification_report(y_test, best_result['predictions'], output_dict=True)
+        report_df = pd.DataFrame(report).transpose()
+        st.dataframe(report_df)
+        
+        # Feature importance (if available)
+        if hasattr(best_result['model'], 'feature_importances_'):
+            st.subheader("🔍 Feature Importance")
+            feature_imp = pd.DataFrame({
+                'Feature': X_test.columns,
+                'Importance': best_result['model'].feature_importances_
+            }).sort_values('Importance', ascending=False)
+            
+            fig = px.bar(feature_imp.head(10), x='Importance', y='Feature', 
+                        title="Top 10 Most Important Features",
+                        orientation='h')
+            st.plotly_chart(fig, use_container_width=True)
 
 def show_admin_panel(data_manager):
     """Show admin panel (admin only)"""
@@ -711,24 +1044,6 @@ def show_admin_panel(data_manager):
                             st.error(message)
     else:
         st.info("No shared datasets to manage.")
-    
-    # User activity
-    st.subheader("👥 User Activity")
-    
-    if all_user_datasets:
-        user_stats = []
-        for username, datasets in all_user_datasets.items():
-            total_size = sum(d.get('file_size_mb', 0) for d in datasets.values())
-            user_stats.append({
-                'User': username,
-                'Datasets': len(datasets),
-                'Total Size (MB)': total_size
-            })
-        
-        user_stats_df = pd.DataFrame(user_stats).sort_values('Datasets', ascending=False)
-        st.dataframe(user_stats_df)
-    else:
-        st.info("No user activity yet.")
 
 if __name__ == "__main__":
     main()
