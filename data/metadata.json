@@ -1,0 +1,318 @@
+{
+  "shared_datasets": {
+    "DXY_DS_77c53b94.csv": {
+      "name": "Dxy Ds",
+      "description": "Dataset: Dxy Ds\nOriginal file: DXY_DS.csv\nShape: 161,333 rows \u00d7 8 columns\nColumns: Date, Open-DXY, High-DXY, Low-DXY, Close-DXY...\nUploaded: 2025-07-17 16:58\nAuto-uploaded via bulk upload script",
+      "uploader": "admin",
+      "upload_date": "2025-07-17T16:58:55.870495",
+      "shape": [
+        161333,
+        8
+      ],
+      "columns": [
+        "Date",
+        "Open-DXY",
+        "High-DXY",
+        "Low-DXY",
+        "Close-DXY",
+        "Volume-DXY",
+        "Unnamed: 6",
+        "Unnamed: 7"
+      ],
+      "file_size_mb": 7.150808334350586
+    },
+    "GLD_Historical_DS_ee6dad01.csv": {
+      "name": "Gld Historical Ds",
+      "description": "Dataset: Gld Historical Ds\nOriginal file: GLD_Historical_DS.csv\nShape: 72,955 rows \u00d7 8 columns\nColumns: Date, Open-GLD, High-GLD, Low-GLD, Close-GLD...\nUploaded: 2025-07-17 16:58\nAuto-uploaded via bulk upload script",
+      "uploader": "admin",
+      "upload_date": "2025-07-17T16:58:55.940614",
+      "shape": [
+        72955,
+        8
+      ],
+      "columns": [
+        "Date",
+        "Open-GLD",
+        "High-GLD",
+        "Low-GLD",
+        "Close-GLD",
+        "Volume-GLD",
+        "Unnamed: 6",
+        "Unnamed: 7"
+      ],
+      "file_size_mb": 3.5318174362182617
+    },
+    "HYG_DS_f350da07.csv": {
+      "name": "Hyg Ds",
+      "description": "Dataset: Hyg Ds\nOriginal file: HYG_DS.csv\nShape: 47,677 rows \u00d7 8 columns\nColumns: Date, Open-HYG, High-HYG, Low-HYG, Close-HYG...\nUploaded: 2025-07-17 16:58\nAuto-uploaded via bulk upload script",
+      "uploader": "admin",
+      "upload_date": "2025-07-17T16:58:55.986317",
+      "shape": [
+        47677,
+        8
+      ],
+      "columns": [
+        "Date",
+        "Open-HYG",
+        "High-HYG",
+        "Low-HYG",
+        "Close-HYG",
+        "Volume-HYG",
+        "Unnamed: 6",
+        "Unnamed: 7"
+      ],
+      "file_size_mb": 2.189650535583496
+    },
+    "IEF_DS_870080bc.csv": {
+      "name": "Ief Ds",
+      "description": "Dataset: Ief Ds\nOriginal file: IEF_DS.csv\nShape: 51,925 rows \u00d7 8 columns\nColumns: Date, Open-IEF, High-IEF, Low-IEF, Close-IEF...\nUploaded: 2025-07-17 16:58\nAuto-uploaded via bulk upload script",
+      "uploader": "admin",
+      "upload_date": "2025-07-17T16:58:56.037522",
+      "shape": [
+        51925,
+        8
+      ],
+      "columns": [
+        "Date",
+        "Open-IEF",
+        "High-IEF",
+        "Low-IEF",
+        "Close-IEF",
+        "Volume-IEF",
+        "Unnamed: 6",
+        "Unnamed: 7"
+      ],
+      "file_size_mb": 2.3435163497924805
+    },
+    "LQD_DS_6934cd70.csv": {
+      "name": "Lqd Ds",
+      "description": "Dataset: Lqd Ds\nOriginal file: LQD_DS.csv\nShape: 46,469 rows \u00d7 8 columns\nColumns: Date, Open-LQD, High-LQD, Low-LQD, Close-LQD...\nUploaded: 2025-07-17 16:58\nAuto-uploaded via bulk upload script",
+      "uploader": "admin",
+      "upload_date": "2025-07-17T16:58:56.084892",
+      "shape": [
+        46469,
+        8
+      ],
+      "columns": [
+        "Date",
+        "Open-LQD",
+        "High-LQD",
+        "Low-LQD",
+        "Close-LQD",
+        "Volume-LQD",
+        "Unnamed: 6",
+        "Unnamed: 7"
+      ],
+      "file_size_mb": 2.3094711303710938
+    },
+    "Response_Var_Historical_DS_d575a29b.csv": {
+      "name": "Response Var Historical Ds",
+      "description": "Dataset: Response Var Historical Ds\nOriginal file: Response_Var_Historical_DS.csv\nShape: 77,767 rows \u00d7 18 columns\nColumns: Date, Open-VXX, High-VXX, Low-VXX, Close-VXX...\nUploaded: 2025-07-17 16:58\nAuto-uploaded via bulk upload script",
+      "uploader": "admin",
+      "upload_date": "2025-07-17T16:58:56.199872",
+      "shape": [
+        77767,
+        18
+      ],
+      "columns": [
+        "Date",
+        "Open-VXX",
+        "High-VXX",
+        "Low-VXX",
+        "Close-VXX",
+        "Volume-VXX",
+        "Open-VIXY",
+        "High-VIXY",
+        "Low-VIXY",
+        "Close-VIXY",
+        "Volume-VIXY",
+        "Open-SVIX",
+        "High-SVIX",
+        "Low-SVIX",
+        "Close-SVIX",
+        "Volume-SVIX",
+        "Unnamed: 16",
+        "Unnamed: 17"
+      ],
+      "file_size_mb": 6.461809158325195
+    },
+    "SPX_DS_03f23821.csv": {
+      "name": "Spx Ds",
+      "description": "Dataset: Spx Ds\nOriginal file: SPX_DS.csv\nShape: 47,379 rows \u00d7 8 columns\nColumns: Date, Open-SPX, High-SPX, Low-SPX, Close-SPX...\nUploaded: 2025-07-17 16:58\nAuto-uploaded via bulk upload script",
+      "uploader": "admin",
+      "upload_date": "2025-07-17T16:58:56.269651",
+      "shape": [
+        47379,
+        8
+      ],
+      "columns": [
+        "Date",
+        "Open-SPX",
+        "High-SPX",
+        "Low-SPX",
+        "Close-SPX",
+        "Unnamed: 5",
+        "Unnamed: 6",
+        "Unnamed: 7"
+      ],
+      "file_size_mb": 2.87807559967041
+    },
+    "SPX_Futures_DS_e64e8401.csv": {
+      "name": "Spx Futures Ds",
+      "description": "Dataset: Spx Futures Ds\nOriginal file: SPX_Futures_DS.csv\nShape: 172,006 rows \u00d7 23 columns\nColumns: Date, Open-ESH25, High-ESH25, Low-ESH25, Close-ESH25...\nUploaded: 2025-07-17 16:58\nAuto-uploaded via bulk upload script",
+      "uploader": "admin",
+      "upload_date": "2025-07-17T16:58:56.593741",
+      "shape": [
+        172006,
+        23
+      ],
+      "columns": [
+        "Date",
+        "Open-ESH25",
+        "High-ESH25",
+        "Low-ESH25",
+        "Close-ESH25",
+        "Volume-ESH25",
+        "Open-ESM25",
+        "High-ESM25",
+        "Low-ESM25",
+        "Close-ESM25",
+        "Volume-ESM25",
+        "Open-ESU25",
+        "High-ESU25",
+        "Low-ESU25",
+        "Close-ESU25",
+        "Volume-ESU25",
+        "Open-ESZ25",
+        "High-ESZ25",
+        "Low-ESZ25",
+        "Close-ESZ25",
+        "Volume-ESZ25",
+        "Unnamed: 21",
+        "Unnamed: 22"
+      ],
+      "file_size_mb": 15.377317428588867
+    },
+    "TLT_DS_1484a3b8.csv": {
+      "name": "Tlt Ds",
+      "description": "Dataset: Tlt Ds\nOriginal file: TLT_DS.csv\nShape: 88,715 rows \u00d7 8 columns\nColumns: Date, Open-TLT, High-TLT, Low-TLT, Close-TLT...\nUploaded: 2025-07-17 16:58\nAuto-uploaded via bulk upload script",
+      "uploader": "admin",
+      "upload_date": "2025-07-17T16:58:56.682251",
+      "shape": [
+        88715,
+        8
+      ],
+      "columns": [
+        "Date",
+        "Open-TLT",
+        "High-TLT",
+        "Low-TLT",
+        "Close-TLT",
+        "Volume-TLT",
+        "Unnamed: 6",
+        "Unnamed: 7"
+      ],
+      "file_size_mb": 4.006431579589844
+    },
+    "USDJPY_DS_eae68e5b.csv": {
+      "name": "Usdjpy Ds",
+      "description": "Dataset: Usdjpy Ds\nOriginal file: USDJPY_DS.csv\nShape: 264,210 rows \u00d7 8 columns\nColumns: Date, Open-USDJPY, High-USDJPY, Low-USDJPY, Close-USDJPY...\nUploaded: 2025-07-17 16:58\nAuto-uploaded via bulk upload script",
+      "uploader": "admin",
+      "upload_date": "2025-07-17T16:58:56.923319",
+      "shape": [
+        264210,
+        8
+      ],
+      "columns": [
+        "Date",
+        "Open-USDJPY",
+        "High-USDJPY",
+        "Low-USDJPY",
+        "Close-USDJPY",
+        "Volume-USDJPY",
+        "Unnamed: 6",
+        "Unnamed: 7"
+      ],
+      "file_size_mb": 13.517391204833984
+    },
+    "VIX_Futures_DS_a95df29f.csv": {
+      "name": "Vix Futures Ds",
+      "description": "Dataset: Vix Futures Ds\nOriginal file: VIX_Futures_DS.csv\nShape: 122,675 rows \u00d7 44 columns\nColumns: Date, Open-VIF25, High-VIF25, Low-VIF25, Close-VIF25...\nUploaded: 2025-07-17 16:58\nAuto-uploaded via bulk upload script",
+      "uploader": "admin",
+      "upload_date": "2025-07-17T16:58:57.189650",
+      "shape": [
+        122675,
+        44
+      ],
+      "columns": [
+        "Date",
+        "Open-VIF25",
+        "High-VIF25",
+        "Low-VIF25",
+        "Close-VIF25",
+        "Volume-VIF25",
+        "Open-VIG25",
+        "High-VIG25",
+        "Low-VIG25",
+        "Close-VIG25",
+        "Volume-VIG25",
+        "Open-VIH25",
+        "High-VIH25",
+        "Low-VIH25",
+        "Close-VIH25",
+        "Volume-VIH25",
+        "Open-VIJ25",
+        "High-VIJ25",
+        "Low-VIJ25",
+        "Close-VIJ25",
+        "Volume-VIJ25",
+        "Open-VIK25",
+        "High-VIK25",
+        "Low-VIK25",
+        "Close-VIK25",
+        "Volume-VIK25",
+        "Open-VIM25",
+        "High-VIM25",
+        "Low-VIM25",
+        "Close-VIM25",
+        "Volume-VIM25",
+        "Open-VIN25",
+        "High-VIN25",
+        "Low-VIN25",
+        "Close-VIN25",
+        "Volume-VIN25",
+        "Open-VIQ25",
+        "High-VIQ25",
+        "Low-VIQ25",
+        "Close-VIQ25",
+        "Volume-VIQ25",
+        "Unnamed: 41",
+        "Unnamed: 42",
+        "Unnamed: 43"
+      ],
+      "file_size_mb": 14.390710830688477
+    },
+    "Vix_Spot_DS_4c33db6c.csv": {
+      "name": "Vix Spot Ds",
+      "description": "Dataset: Vix Spot Ds\nOriginal file: Vix_Spot_DS.csv\nShape: 90,578 rows \u00d7 8 columns\nColumns: Date, Open-VIX, High-VIX, Low-VIX, Close-VIX...\nUploaded: 2025-07-17 16:58\nAuto-uploaded via bulk upload script",
+      "uploader": "admin",
+      "upload_date": "2025-07-17T16:58:57.262459",
+      "shape": [
+        90578,
+        8
+      ],
+      "columns": [
+        "Date",
+        "Open-VIX",
+        "High-VIX",
+        "Low-VIX",
+        "Close-VIX",
+        "Unnamed: 5",
+        "Unnamed: 6",
+        "Unnamed: 7"
+      ],
+      "file_size_mb": 3.697892189025879
+    }
+  },
+  "user_datasets": {}
+}

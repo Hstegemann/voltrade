@@ -1,1027 +1,734 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.graph_objects as go
-import plotly.express as px
-from plotly.subplots import make_subplots
-import io
-import zipfile
 import os
 import json
 import hashlib
-from datetime import datetime, timedelta
-import warnings
+from datetime import datetime
 import pickle
-import joblib
-from sklearn.model_selection import TimeSeriesSplit
-from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import classification_report, roc_auc_score, confusion_matrix, roc_curve
-import matplotlib.pyplot as plt
-import seaborn as sns
+import zipfile
+from io import BytesIO
+import plotly.express as px
+import plotly.graph_objects as go
 
-warnings.filterwarnings('ignore')
-
-# Set page config
+# Configure page
 st.set_page_config(
-    page_title="ML Volatility Trading Model",
+    page_title="ML Volatility Trading Platform",
     page_icon="📈",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# =====================================================================
-# EMBEDDED AUTHENTICATION CONFIGURATION
-# =====================================================================
-
-def hash_password(password):
-    """Hash password using SHA256"""
-    return hashlib.sha256(str.encode(password)).hexdigest()
-
-# User credentials (embedded for Streamlit Cloud compatibility)
-FINAL_USERS = {
-    "admin": hash_password("VixTrading2025!"),       # Full access admin
-    "trader": hash_password("TradingSecure123"),     # Trading access
-    "analyst": hash_password("AnalysisView456"),     # View-only access
-    "james": hash_password("YourPersonalPass"),      # Your personal account
-}
-
-USER_PERMISSIONS = {
-    "admin": ["upload", "train", "download", "view", "manage"],
-    "trader": ["upload", "train", "view", "download"],
-    "analyst": ["view", "download"],
-    "james": ["upload", "train", "download", "view", "manage"],  # Your full access
-}
-
-PRODUCTION_MODE = False
-SHOW_DEMO_CREDENTIALS = not PRODUCTION_MODE
-
-# =====================================================================
-# AUTHENTICATION SYSTEM
-# =====================================================================
-
-class AuthenticationManager:
-    """Authentication system with embedded credentials"""
+class DataManager:
+    """
+    Comprehensive data management system for the ML volatility platform
+    """
     
     def __init__(self):
-        self.users = FINAL_USERS
-        self.permissions = USER_PERMISSIONS
+        self.data_dir = "data"
+        self.shared_data_dir = os.path.join(self.data_dir, "shared")
+        self.user_data_dir = os.path.join(self.data_dir, "users")
+        self.metadata_file = os.path.join(self.data_dir, "metadata.json")
+        
+        # Create directories
+        for directory in [self.data_dir, self.shared_data_dir, self.user_data_dir]:
+            os.makedirs(directory, exist_ok=True)
+        
+        # Initialize metadata
+        self.metadata = self.load_metadata()
     
-    def hash_password(self, password):
-        """Hash password using SHA256"""
-        return hashlib.sha256(str.encode(password)).hexdigest()
+    def load_metadata(self):
+        """Load dataset metadata"""
+        if os.path.exists(self.metadata_file):
+            with open(self.metadata_file, 'r') as f:
+                return json.load(f)
+        return {"shared_datasets": {}, "user_datasets": {}}
     
-    def check_password(self, username, password):
-        """Check if username/password combination is valid"""
-        if username in self.users:
-            return self.users[username] == self.hash_password(password)
-        return False
+    def save_metadata(self):
+        """Save dataset metadata"""
+        with open(self.metadata_file, 'w') as f:
+            json.dump(self.metadata, f, indent=2, default=str)
     
-    def get_user_permissions(self, username):
-        """Get permissions for a user"""
-        return self.permissions.get(username, [])
-    
-    def has_permission(self, username, permission):
-        """Check if user has specific permission"""
-        user_perms = self.get_user_permissions(username)
-        return permission in user_perms
-
-def show_login_page():
-    """Display login page"""
-    st.markdown("""
-    <div style="text-align: center; padding: 3rem;">
-        <h1>🔒 ML Volatility Trading Model</h1>
-        <h3>Secure Access Required</h3>
-        <p>Please login to access the trading model dashboard</p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Center the login form
-    col1, col2, col3 = st.columns([1, 1, 1])
-    
-    with col2:
-        st.markdown("### Login")
-        
-        with st.form("login_form"):
-            username = st.text_input("Username")
-            password = st.text_input("Password", type="password")
-            submitted = st.form_submit_button("🔓 Login")
-            
-            if submitted:
-                auth = AuthenticationManager()
-                if auth.check_password(username, password):
-                    st.session_state.authenticated = True
-                    st.session_state.username = username
-                    st.session_state.permissions = auth.get_user_permissions(username)
-                    st.session_state.login_time = datetime.now()
-                    st.success("✅ Login successful!")
-                    st.rerun()
-                else:
-                    st.error("❌ Invalid username or password")
-        
-        # Show demo credentials only if enabled in config
-        if SHOW_DEMO_CREDENTIALS:
-            with st.expander("Demo Credentials", expanded=False):
-                st.markdown("""
-                **Demo accounts:**
-                - **admin** / VixTrading2025! (full access)
-                - **trader** / TradingSecure123 (upload & train)
-                - **analyst** / AnalysisView456 (view only)
-                - **james** / YourPersonalPass (full access)
-                
-                *⚠️ Change these passwords before production!*
-                """)
-        
-        if PRODUCTION_MODE:
-            st.info("🔒 Production mode - Contact administrator for access")
-
-def show_logout_option():
-    """Show logout option in sidebar"""
-    st.sidebar.markdown("---")
-    st.sidebar.markdown(f"👤 **Logged in as:** {st.session_state.username}")
-    
-    # Show user permissions
-    perms = st.session_state.get('permissions', [])
-    st.sidebar.markdown(f"🔑 **Permissions:** {', '.join(perms)}")
-    
-    # Show login time
-    if 'login_time' in st.session_state:
-        login_time = st.session_state.login_time
-        st.sidebar.markdown(f"🕐 **Login time:** {login_time.strftime('%H:%M:%S')}")
-    
-    if st.sidebar.button("🚪 Logout"):
-        # Clear all session state
-        for key in list(st.session_state.keys()):
-            del st.session_state[key]
-        st.rerun()
-
-def check_permission(permission):
-    """Check if user has permission"""
-    auth = AuthenticationManager()
-    username = st.session_state.get('username', '')
-    return auth.has_permission(username, permission)
-
-def require_permission(permission):
-    """Show message if user doesn't have permission"""
-    if not check_permission(permission):
-        st.error(f"❌ Access denied. You need '{permission}' permission for this action.")
-        st.info(f"Your permissions: {', '.join(st.session_state.get('permissions', []))}")
-        return False
-    return True
-
-# =====================================================================
-# DATA GENERATION AND ML CLASSES
-# =====================================================================
-
-class VIXFuturesSimplifier:
-    """Simplified version for demo data generation"""
-    
-    def __init__(self):
-        pass
-    
-    def create_synthetic_data(self, n_points=10000):
-        """Create synthetic VIX and volatility ETF data"""
-        np.random.seed(42)
-        
-        # Generate timestamps (1-minute data)
-        start_date = datetime(2024, 1, 1, 9, 30)
-        timestamps = [start_date + timedelta(minutes=i) for i in range(n_points)]
-        
-        # Generate VIX-like data (mean reverting)
-        vix_base = 20
-        vix_prices = []
-        current_vix = vix_base
-        
-        for _ in range(n_points):
-            # Mean reverting random walk
-            change = np.random.normal(0, 0.02) - 0.001 * (current_vix - vix_base) / vix_base
-            current_vix *= (1 + change)
-            current_vix = max(8, min(80, current_vix))  # Keep within reasonable bounds
-            vix_prices.append(current_vix)
-        
-        # Generate VIXY with decay (tracks VIX futures)
-        vixy_prices = []
-        vixy_start = 20.0
-        current_vixy = vixy_start
-        daily_decay = -0.0025
-        
-        for i in range(n_points):
-            if i > 0:
-                vix_return = (vix_prices[i] - vix_prices[i-1]) / vix_prices[i-1]
-                vixy_return = vix_return * 0.5 + daily_decay / 390  # Daily decay spread over 390 minutes
-                current_vixy *= (1 + vixy_return)
-                current_vixy = max(1, current_vixy)  # Floor at $1
-            vixy_prices.append(current_vixy)
-        
-        # Generate SPX data
-        spx_base = 4500
-        spx_prices = []
-        current_spx = spx_base
-        
-        for _ in range(n_points):
-            change = np.random.normal(0, 0.008)
-            current_spx *= (1 + change)
-            current_spx = max(3000, min(6000, current_spx))
-            spx_prices.append(current_spx)
-        
-        # Generate HYG and TLT
-        hyg_base = 85
-        tlt_base = 95
-        hyg_prices = [hyg_base * (1 + np.random.normal(0, 0.005)) for _ in range(n_points)]
-        tlt_prices = [tlt_base * (1 + np.random.normal(0, 0.003)) for _ in range(n_points)]
-        
-        # Create DataFrame
-        df = pd.DataFrame({
-            'Timestamp': timestamps,
-            'VIX_Close': vix_prices,
-            'VIXY_Close': vixy_prices,
-            'SPX_Close': spx_prices,
-            'HYG_Close': hyg_prices,
-            'TLT_Close': tlt_prices
-        })
-        
-        df.set_index('Timestamp', inplace=True)
-        return df
-
-class FeatureEngineer:
-    """Feature engineering for volatility trading"""
-    
-    def __init__(self, data_df):
-        self.df = data_df.copy()
-        self.features = pd.DataFrame(index=data_df.index)
-    
-    def calculate_technical_indicators(self):
-        """Calculate technical indicators for all assets"""
-        
-        for col in self.df.columns:
-            if '_Close' in col:
-                asset_name = col.replace('_Close', '')
-                prices = self.df[col]
-                
-                # Lagged returns
-                for lag in [5, 10, 15, 30, 60]:
-                    self.features[f'{asset_name}_return_lag{lag}'] = prices.pct_change(lag)
-                
-                # Moving averages
-                self.features[f'{asset_name}_SMA_20'] = prices.rolling(20).mean()
-                self.features[f'{asset_name}_SMA_50'] = prices.rolling(50).mean()
-                self.features[f'{asset_name}_price_to_SMA20'] = prices / self.features[f'{asset_name}_SMA_20']
-                
-                # RSI
-                delta = prices.diff()
-                gain = (delta.where(delta > 0, 0)).rolling(14).mean()
-                loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
-                rs = gain / loss
-                self.features[f'{asset_name}_RSI'] = 100 - (100 / (1 + rs))
-                
-                # Bollinger Bands %B
-                sma = prices.rolling(20).mean()
-                std = prices.rolling(20).std()
-                upper = sma + (2 * std)
-                lower = sma - (2 * std)
-                self.features[f'{asset_name}_BB_pct'] = (prices - lower) / (upper - lower)
-                
-                # Volatility
-                self.features[f'{asset_name}_volatility_30'] = prices.pct_change().rolling(30).std()
-    
-    def calculate_cross_asset_features(self):
-        """Calculate cross-asset features"""
-        
-        # VIX/SPX ratio
-        if 'VIX_Close' in self.df.columns and 'SPX_Close' in self.df.columns:
-            self.features['VIX_SPX_ratio'] = self.df['VIX_Close'] / self.df['SPX_Close'] * 100
-            self.features['VIX_SPX_ratio_zscore'] = (
-                self.features['VIX_SPX_ratio'] - self.features['VIX_SPX_ratio'].rolling(252).mean()
-            ) / self.features['VIX_SPX_ratio'].rolling(252).std()
-        
-        # HYG/TLT spread
-        if 'HYG_Close' in self.df.columns and 'TLT_Close' in self.df.columns:
-            self.features['HYG_TLT_ratio'] = self.df['HYG_Close'] / self.df['TLT_Close']
-            self.features['HYG_TLT_spread'] = self.df['HYG_Close'] - self.df['TLT_Close']
-        
-        # VIX regime indicators
-        if 'VIX_Close' in self.df.columns:
-            self.features['VIX_low_regime'] = (self.df['VIX_Close'] < 15).astype(int)
-            self.features['VIX_normal_regime'] = ((self.df['VIX_Close'] >= 15) & (self.df['VIX_Close'] < 25)).astype(int)
-            self.features['VIX_high_regime'] = ((self.df['VIX_Close'] >= 25) & (self.df['VIX_Close'] < 35)).astype(int)
-            self.features['VIX_extreme_regime'] = (self.df['VIX_Close'] >= 35).astype(int)
-    
-    def calculate_response_variables(self):
-        """Calculate forward-looking response variables"""
-        response_df = pd.DataFrame(index=self.df.index)
-        
-        # Use VIXY as target if available, otherwise VIX
-        target_col = 'VIXY_Close' if 'VIXY_Close' in self.df.columns else 'VIX_Close'
-        
-        if target_col in self.df.columns:
-            prices = self.df[target_col]
-            
-            # Future returns at different horizons
-            for horizon in [5, 15, 30, 60]:
-                future_price = prices.shift(-horizon)
-                
-                # Continuous returns
-                response_df[f'return_next_{horizon}min'] = (future_price - prices) / prices
-                
-                # Binary direction
-                response_df[f'direction_next_{horizon}min'] = (future_price > prices).astype(int)
-        
-        return response_df
-    
-    def engineer_all_features(self):
-        """Run all feature engineering"""
-        self.calculate_technical_indicators()
-        self.calculate_cross_asset_features()
-        response_vars = self.calculate_response_variables()
-        
-        # Combine everything
-        all_features = pd.concat([self.df, self.features, response_vars], axis=1)
-        
-        return all_features
-
-class ModelTrainer:
-    """Model training class"""
-    
-    def __init__(self):
-        self.models = {}
-        self.results = {}
-        self.scaler = None
-    
-    def prepare_data(self, data, target_col='direction_next_15min', test_size=0.2):
-        """Prepare data for model training"""
-        
-        # Identify feature columns
-        feature_cols = [col for col in data.columns 
-                       if 'next_' not in col  # Not a response variable
-                       and col not in ['VIX_Close', 'VIXY_Close', 'SPX_Close', 'HYG_Close', 'TLT_Close']  # Not raw prices
-                       and not col.endswith('_Close')]  # Not any close price
-        
-        # Remove columns with too many NaN values
-        feature_cols = [col for col in feature_cols 
-                       if data[col].notna().sum() / len(data) > 0.5]
-        
-        X = data[feature_cols].copy()
-        y = data[target_col].copy()
-        
-        # Remove rows with missing target
-        valid_mask = y.notna()
-        X = X[valid_mask]
-        y = y[valid_mask]
-        
-        # Handle missing values
-        X = X.fillna(method='ffill', limit=5)
-        X = X.fillna(0)
-        
-        # Time series split
-        split_idx = int(len(X) * (1 - test_size))
-        
-        self.X_train = X.iloc[:split_idx]
-        self.X_test = X.iloc[split_idx:]
-        self.y_train = y.iloc[:split_idx]
-        self.y_test = y.iloc[split_idx:]
-        
-        # Scale features
-        self.scaler = StandardScaler()
-        self.X_train_scaled = self.scaler.fit_transform(self.X_train)
-        self.X_test_scaled = self.scaler.transform(self.X_test)
-        
-        self.feature_names = feature_cols
-        
-        return len(X), len(feature_cols)
-    
-    def train_models(self):
-        """Train all models"""
-        
-        results = {}
-        
-        # Logistic Regression
-        lr = LogisticRegression(random_state=42, max_iter=1000, class_weight='balanced')
-        lr.fit(self.X_train_scaled, self.y_train)
-        
-        y_pred = lr.predict(self.X_test_scaled)
-        y_proba = lr.predict_proba(self.X_test_scaled)[:, 1]
-        
-        results['Logistic Regression'] = {
-            'model': lr,
-            'predictions': y_pred,
-            'probabilities': y_proba,
-            'roc_auc': roc_auc_score(self.y_test, y_proba)
-        }
-        
-        # Random Forest
-        rf = RandomForestClassifier(
-            n_estimators=100, 
-            random_state=42, 
-            class_weight='balanced',
-            max_depth=10,
-            n_jobs=-1
-        )
-        rf.fit(self.X_train, self.y_train)
-        
-        y_pred = rf.predict(self.X_test)
-        y_proba = rf.predict_proba(self.X_test)[:, 1]
-        
-        results['Random Forest'] = {
-            'model': rf,
-            'predictions': y_pred,
-            'probabilities': y_proba,
-            'roc_auc': roc_auc_score(self.y_test, y_proba),
-            'feature_importance': pd.DataFrame({
-                'feature': self.feature_names,
-                'importance': rf.feature_importances_
-            }).sort_values('importance', ascending=False)
-        }
-        
-        # Try XGBoost if available
+    def upload_shared_dataset(self, file, name, description, uploader):
+        """Upload a dataset to be shared with all users"""
         try:
-            import xgboost as xgb
+            # Generate unique filename
+            file_hash = hashlib.md5(file.getvalue()).hexdigest()[:8]
+            filename = f"{name}_{file_hash}.csv"
+            filepath = os.path.join(self.shared_data_dir, filename)
             
-            scale_pos_weight = (self.y_train == 0).sum() / (self.y_train == 1).sum()
+            # Read and validate data
+            df = pd.read_csv(file)
             
-            xgb_model = xgb.XGBClassifier(
-                n_estimators=100,
-                max_depth=6,
-                learning_rate=0.1,
-                random_state=42,
-                scale_pos_weight=scale_pos_weight,
-                use_label_encoder=False,
-                eval_metric='logloss'
-            )
+            # Save file
+            df.to_csv(filepath, index=False)
             
-            xgb_model.fit(self.X_train, self.y_train, verbose=False)
-            
-            y_pred = xgb_model.predict(self.X_test)
-            y_proba = xgb_model.predict_proba(self.X_test)[:, 1]
-            
-            results['XGBoost'] = {
-                'model': xgb_model,
-                'predictions': y_pred,
-                'probabilities': y_proba,
-                'roc_auc': roc_auc_score(self.y_test, y_proba),
-                'feature_importance': pd.DataFrame({
-                    'feature': self.feature_names,
-                    'importance': xgb_model.feature_importances_
-                }).sort_values('importance', ascending=False)
+            # Update metadata
+            self.metadata["shared_datasets"][filename] = {
+                "name": name,
+                "description": description,
+                "uploader": uploader,
+                "upload_date": datetime.now().isoformat(),
+                "shape": df.shape,
+                "columns": list(df.columns),
+                "file_size_mb": os.path.getsize(filepath) / (1024 * 1024)
             }
             
-        except ImportError:
-            st.warning("XGBoost not available. Install with: pip install xgboost")
-        
-        self.results = results
-        return results
-
-# =====================================================================
-# MAIN STREAMLIT APP
-# =====================================================================
-
-# CSS styling
-st.markdown("""
-<style>
-    .main-header {
-        font-size: 3rem;
-        color: #1f77b4;
-        text-align: center;
-        margin-bottom: 2rem;
-    }
-    .sub-header {
-        font-size: 1.5rem;
-        color: #2e8b57;
-        margin-top: 2rem;
-        margin-bottom: 1rem;
-    }
-    .success-box {
-        background-color: #d4edda;
-        border: 1px solid #c3e6cb;
-        color: #155724;
-        padding: 1rem;
-        border-radius: 0.25rem;
-        margin: 1rem 0;
-    }
-    .warning-box {
-        background-color: #fff3cd;
-        border: 1px solid #ffeaa7;
-        color: #856404;
-        padding: 1rem;
-        border-radius: 0.25rem;
-        margin: 1rem 0;
-    }
-    .info-box {
-        background-color: #e3f2fd;
-        border: 1px solid #90caf9;
-        color: #0d47a1;
-        padding: 1rem;
-        border-radius: 0.25rem;
-        margin: 1rem 0;
-    }
-</style>
-""", unsafe_allow_html=True)
-
-# Check authentication status
-if 'authenticated' not in st.session_state:
-    st.session_state.authenticated = False
-
-# If not authenticated, show login page
-if not st.session_state.authenticated:
-    show_login_page()
-    st.stop()  # Stop execution here
-
-# If authenticated, show the main app
-st.markdown('<h1 class="main-header">📈 ML Volatility Trading Model</h1>', unsafe_allow_html=True)
-
-# Sidebar navigation
-st.sidebar.title("🔧 Navigation")
-page = st.sidebar.selectbox(
-    "Choose a page", 
-    ["📊 Data Processing", "🔧 Feature Engineering", "🤖 Model Training", "📈 Analysis & Results"]
-)
-
-# =====================================================================
-# PROJECT PROGRESS TRACKER
-# =====================================================================
-
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 📋 **Project Progress**")
-
-# Define project phases based on your original outline
-project_phases = {
-    "Phase 1: Environment Setup": {
-        "status": "✅",
-        "items": [
-            "✅ Python IDE (Streamlit App)",
-            "✅ Required packages",
-            "✅ Data access ready",
-            "✅ Authentication system"
-        ]
-    },
-    "Phase 2: Data Pipeline": {
-        "status": "✅",
-        "items": [
-            "✅ Futures data processor",
-            "✅ Multi-asset merger",
-            "✅ Timezone handling",
-            "✅ Rollover logic"
-        ]
-    },
-    "Phase 3: Feature Engineering": {
-        "status": "🔄" if st.session_state.get('engineered_features') is None else "✅",
-        "items": [
-            f"{'✅' if st.session_state.get('processed_data') is not None else '⏳'} Data loaded",
-            f"{'✅' if st.session_state.get('engineered_features') is not None else '⏳'} Technical indicators",
-            f"{'✅' if st.session_state.get('engineered_features') is not None else '⏳'} Cross-asset features",
-            f"{'✅' if st.session_state.get('engineered_features') is not None else '⏳'} Response variables"
-        ]
-    },
-    "Phase 4: Model Development": {
-        "status": "🔄" if st.session_state.get('model_results') is None else "✅",
-        "items": [
-            f"{'✅' if st.session_state.get('model_results') is not None else '⏳'} Logistic Regression",
-            f"{'✅' if st.session_state.get('model_results') is not None else '⏳'} Random Forest",
-            f"{'✅' if st.session_state.get('model_results') is not None else '⏳'} XGBoost (optional)",
-            f"{'✅' if st.session_state.get('model_results') is not None else '⏳'} Model evaluation"
-        ]
-    },
-    "Phase 5: Backtesting": {
-        "status": "⏳",
-        "items": [
-            "⏳ Signal generation",
-            "⏳ Historical testing",
-            "⏳ Performance metrics",
-            "⏳ Risk analysis"
-        ]
-    },
-    "Phase 6: Live Trading": {
-        "status": "⏳",
-        "items": [
-            "⏳ Real-time data feed",
-            "⏳ Position sizing",
-            "⏳ Risk management",
-            "⏳ Paper trading"
-        ]
-    }
-}
-
-# Show current phase progress
-current_phase = None
-for phase_name, phase_data in project_phases.items():
-    if phase_data["status"] == "🔄":
-        current_phase = phase_name
-        break
-
-if current_phase:
-    st.sidebar.markdown(f"**🎯 Current Focus:** {current_phase.split(':')[1].strip()}")
-
-# Expandable progress tracker
-with st.sidebar.expander("📊 Detailed Progress", expanded=False):
-    for phase_name, phase_data in project_phases.items():
-        st.markdown(f"**{phase_data['status']} {phase_name}**")
-        for item in phase_data["items"]:
-            st.markdown(f"  {item}")
-        st.markdown("")
-
-# Quick stats
-total_items = sum(len(phase["items"]) for phase in project_phases.values())
-completed_items = sum(
-    len([item for item in phase["items"] if item.startswith("✅")]) 
-    for phase in project_phases.values()
-)
-progress_pct = (completed_items / total_items) * 100
-
-st.sidebar.markdown(f"**Overall Progress:** {completed_items}/{total_items} ({progress_pct:.0f}%)")
-st.sidebar.progress(progress_pct / 100)
-
-# Next steps reminder
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 🎯 **Next Steps**")
-
-if st.session_state.get('processed_data') is None:
-    st.sidebar.markdown("1. 📊 Generate or upload data")
-elif st.session_state.get('engineered_features') is None:
-    st.sidebar.markdown("1. 🔧 Run feature engineering")
-elif st.session_state.get('model_results') is None:
-    st.sidebar.markdown("1. 🤖 Train ML models")
-else:
-    st.sidebar.markdown("1. 📈 Analyze results")
-    st.sidebar.markdown("2. 🔄 Implement backtesting")
-    st.sidebar.markdown("3. 📈 Deploy for live trading")
-
-# Show logout option
-show_logout_option()
-
-# Initialize session state
-if 'processed_data' not in st.session_state:
-    st.session_state.processed_data = None
-if 'engineered_features' not in st.session_state:
-    st.session_state.engineered_features = None
-if 'model_results' not in st.session_state:
-    st.session_state.model_results = None
-
-# =====================================================================
-# PAGE CONTENT
-# =====================================================================
-
-if page == "📊 Data Processing":
-    st.markdown('<h2 class="sub-header">📊 Data Processing</h2>', unsafe_allow_html=True)
-    
-    st.markdown("### Upload Your Processed Data")
-    # Check upload permission
-    if not require_permission("upload"):
-        st.stop()
-        
-    uploaded_file = st.file_uploader(
-        "Upload your merged/processed CSV file", 
-        type=['csv'],
-        help="Upload output from your VIX futures processor or multi-asset merger"
-    )
-    
-    if uploaded_file is not None:
-        try:
-            # Read the uploaded file
-            data = pd.read_csv(uploaded_file, index_col=0, parse_dates=True)
-            st.session_state.processed_data = data
-            
-            st.success(f"✅ Uploaded {len(data):,} rows of data!")
-            
-            # Show preview
-            st.markdown("**Data Preview:**")
-            st.dataframe(data.head(10))
-            
-            # Show column info
-            st.markdown("**Available Columns:**")
-            col_info = pd.DataFrame({
-                'Column': data.columns,
-                'Type': data.dtypes,
-                'Non-Null Count': data.count(),
-                'Null %': (data.isnull().sum() / len(data) * 100).round(1)
-            })
-            st.dataframe(col_info)
+            self.save_metadata()
+            return True, f"Dataset '{name}' uploaded successfully!"
             
         except Exception as e:
-            st.error(f"Error loading file: {str(e)}")
-
-elif page == "🔧 Feature Engineering":
-    st.markdown('<h2 class="sub-header">🔧 Feature Engineering</h2>', unsafe_allow_html=True)
+            return False, f"Error uploading dataset: {str(e)}"
     
-    if st.session_state.processed_data is None:
-        st.warning("⚠️ Please process data first on the Data Processing page.")
-    else:
-        data = st.session_state.processed_data
-        
-        st.markdown("### Feature Engineering Configuration")
-        
-        # Configuration options
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("**Technical Indicators:**")
-            include_returns = st.checkbox("Lagged Returns", value=True)
-            include_moving_avg = st.checkbox("Moving Averages", value=True)
-            include_rsi = st.checkbox("RSI", value=True)
-            include_bollinger = st.checkbox("Bollinger Bands", value=True)
-        
-        with col2:
-            st.markdown("**Cross-Asset Features:**")
-            include_ratios = st.checkbox("Asset Ratios", value=True)
-            include_spreads = st.checkbox("Spreads", value=True)
-            include_regimes = st.checkbox("Regime Indicators", value=True)
-        
-        # Response variable configuration
-        st.markdown("**Response Variables:**")
-        target_horizons = st.multiselect(
-            "Prediction horizons (minutes):",
-            [5, 15, 30, 60],
-            default=[15, 30]
-        )
-        
-        if st.button("🔧 Engineer Features", type="primary"):
-            with st.spinner("Engineering features..."):
-                # Initialize feature engineer
-                fe = FeatureEngineer(data)
-                
-                # Run feature engineering
-                engineered_data = fe.engineer_all_features()
-                
-                # Store in session state
-                st.session_state.engineered_features = engineered_data
+    def upload_user_dataset(self, file, name, username):
+        """Upload a dataset for a specific user"""
+        try:
+            # Create user directory
+            user_dir = os.path.join(self.user_data_dir, username)
+            os.makedirs(user_dir, exist_ok=True)
             
-            st.success("✅ Feature engineering completed!")
+            # Generate filename
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"{name}_{timestamp}.csv"
+            filepath = os.path.join(user_dir, filename)
             
-            # Show feature summary
-            feature_cols = [col for col in engineered_data.columns 
-                          if col not in data.columns]
-            response_cols = [col for col in engineered_data.columns 
-                           if 'next_' in col]
+            # Read and save data
+            df = pd.read_csv(file)
+            df.to_csv(filepath, index=False)
             
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Original Columns", len(data.columns))
-            with col2:
-                st.metric("New Features", len(feature_cols))
-            with col3:
-                st.metric("Response Variables", len(response_cols))
+            # Update metadata
+            if username not in self.metadata["user_datasets"]:
+                self.metadata["user_datasets"][username] = {}
             
-            # Show feature categories
-            st.markdown("**Feature Categories:**")
-            categories = {
-                'Returns': len([c for c in feature_cols if 'return' in c]),
-                'Technical Indicators': len([c for c in feature_cols if any(x in c for x in ['RSI', 'SMA', 'BB'])]),
-                'Cross-Asset': len([c for c in feature_cols if any(x in c for x in ['ratio', 'spread'])]),
-                'Regime': len([c for c in feature_cols if 'regime' in c]),
+            self.metadata["user_datasets"][username][filename] = {
+                "name": name,
+                "upload_date": datetime.now().isoformat(),
+                "shape": df.shape,
+                "columns": list(df.columns),
+                "file_size_mb": os.path.getsize(filepath) / (1024 * 1024)
             }
             
-            cat_df = pd.DataFrame(list(categories.items()), columns=['Category', 'Count'])
-            st.dataframe(cat_df, use_container_width=True)
+            self.save_metadata()
+            return True, f"Personal dataset '{name}' uploaded successfully!"
             
-            # Response variable analysis
-            if response_cols:
-                st.markdown("**Response Variable Analysis:**")
-                
-                for resp_col in response_cols[:3]:  # Show first 3
-                    if 'direction' in resp_col:
-                        valid_data = engineered_data[resp_col].dropna()
-                        if len(valid_data) > 0:
-                            up_pct = valid_data.mean() * 100
-                            st.write(f"**{resp_col}**: {up_pct:.1f}% up moves, {100-up_pct:.1f}% down moves")
+        except Exception as e:
+            return False, f"Error uploading dataset: {str(e)}"
+    
+    def get_shared_datasets(self):
+        """Get list of shared datasets"""
+        return self.metadata.get("shared_datasets", {})
+    
+    def get_user_datasets(self, username):
+        """Get list of user's personal datasets"""
+        return self.metadata.get("user_datasets", {}).get(username, {})
+    
+    def load_shared_dataset(self, filename):
+        """Load a shared dataset"""
+        filepath = os.path.join(self.shared_data_dir, filename)
+        if os.path.exists(filepath):
+            return pd.read_csv(filepath)
+        return None
+    
+    def load_user_dataset(self, username, filename):
+        """Load a user's personal dataset"""
+        filepath = os.path.join(self.user_data_dir, username, filename)
+        if os.path.exists(filepath):
+            return pd.read_csv(filepath)
+        return None
+    
+    def delete_dataset(self, dataset_type, username, filename):
+        """Delete a dataset"""
+        try:
+            if dataset_type == "shared":
+                filepath = os.path.join(self.shared_data_dir, filename)
+                if filename in self.metadata["shared_datasets"]:
+                    del self.metadata["shared_datasets"][filename]
+            else:
+                filepath = os.path.join(self.user_data_dir, username, filename)
+                if username in self.metadata["user_datasets"] and filename in self.metadata["user_datasets"][username]:
+                    del self.metadata["user_datasets"][username][filename]
+            
+            if os.path.exists(filepath):
+                os.remove(filepath)
+            
+            self.save_metadata()
+            return True, "Dataset deleted successfully!"
+            
+        except Exception as e:
+            return False, f"Error deleting dataset: {str(e)}"
 
-elif page == "🤖 Model Training":
-    st.markdown('<h2 class="sub-header">🤖 Model Training</h2>', unsafe_allow_html=True)
-    
-    # Check training permission
-    if not require_permission("train"):
-        st.stop()
-    
-    if st.session_state.engineered_features is None:
-        st.warning("⚠️ Please complete feature engineering first.")
-    else:
-        data = st.session_state.engineered_features
+# Authentication System
+def check_password():
+    """Simple authentication system"""
+    def password_entered():
+        users = {
+            "admin": "admin123",
+            "trader": "trade456", 
+            "analyst": "analyze789",
+            "james": "james2025"
+        }
         
-        st.markdown("### Model Training Configuration")
+        username = st.session_state["username"].lower()
+        password = st.session_state["password"]
         
-        # Target selection
-        response_cols = [col for col in data.columns if 'direction_next_' in col]
-        
-        if not response_cols:
-            st.error("❌ No response variables found. Please run feature engineering first.")
+        if username in users and users[username] == password:
+            st.session_state["authenticated"] = True
+            st.session_state["user_role"] = username
+            st.session_state["current_user"] = username
+            del st.session_state["password"]  # Don't store password
         else:
-            target_col = st.selectbox("Select target variable:", response_cols)
-            
-            # Training parameters
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                test_size = st.slider("Test set size", 0.1, 0.4, 0.2, 0.05)
-                
-            with col2:
-                models_to_train = st.multiselect(
-                    "Models to train:",
-                    ["Logistic Regression", "Random Forest", "XGBoost"],
-                    default=["Logistic Regression", "Random Forest"]
-                )
-            
-            if st.button("🤖 Train Models", type="primary"):
-                with st.spinner("Training models..."):
-                    # Initialize trainer
-                    trainer = ModelTrainer()
-                    
-                    # Prepare data
-                    n_samples, n_features = trainer.prepare_data(data, target_col, test_size)
-                    
-                    # Check class balance
-                    train_balance = trainer.y_train.value_counts()
-                    test_balance = trainer.y_test.value_counts()
-                    
-                    st.markdown("**Data Preparation Summary:**")
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        st.metric("Total Samples", n_samples)
-                    with col2:
-                        st.metric("Features", n_features)
-                    with col3:
-                        st.metric("Train/Test Split", f"{len(trainer.X_train)}/{len(trainer.X_test)}")
-                    
-                    # Show class distribution
-                    st.markdown("**Class Distribution:**")
-                    dist_col1, dist_col2 = st.columns(2)
-                    
-                    with dist_col1:
-                        st.write("**Training Set:**")
-                        st.write(f"Up: {train_balance.get(1, 0):,} ({train_balance.get(1, 0)/len(trainer.y_train)*100:.1f}%)")
-                        st.write(f"Down: {train_balance.get(0, 0):,} ({train_balance.get(0, 0)/len(trainer.y_train)*100:.1f}%)")
-                    
-                    with dist_col2:
-                        st.write("**Test Set:**")
-                        st.write(f"Up: {test_balance.get(1, 0):,} ({test_balance.get(1, 0)/len(trainer.y_test)*100:.1f}%)")
-                        st.write(f"Down: {test_balance.get(0, 0):,} ({test_balance.get(0, 0)/len(trainer.y_test)*100:.1f}%)")
-                    
-                    # Check if we have both classes
-                    if len(train_balance) < 2:
-                        st.error("❌ Training set has only one class! This usually means:")
-                        st.write("- The target variable is not properly constructed")
-                        st.write("- Try a different time horizon")
-                        st.write("- Check the forward-looking calculation")
-                        
-                        # Show diagnostic info
-                        target_data = data[target_col].dropna()
-                        st.write(f"Target variable `{target_col}` distribution:")
-                        st.write(target_data.value_counts())
-                        
-                    else:
-                        # Train models
-                        results = trainer.train_models()
-                        
-                        # Store results
-                        st.session_state.model_results = {
-                            'trainer': trainer,
-                            'results': results,
-                            'target_col': target_col
-                        }
-                        
-                        st.success("✅ Model training completed!")
-                        
-                        # Show results summary
-                        st.markdown("**Model Performance Summary:**")
-                        
-                        perf_data = []
-                        for model_name, result in results.items():
-                            perf_data.append({
-                                'Model': model_name,
-                                'ROC-AUC': f"{result['roc_auc']:.4f}",
-                                'Accuracy': f"{(result['predictions'] == trainer.y_test).mean():.4f}"
-                            })
-                        
-                        perf_df = pd.DataFrame(perf_data)
-                        st.dataframe(perf_df, use_container_width=True)
-                        
-                        # Best model
-                        best_model = max(results.keys(), key=lambda k: results[k]['roc_auc'])
-                        best_auc = results[best_model]['roc_auc']
-                        
-                        st.markdown(f"**🏆 Best Model**: {best_model} (ROC-AUC: {best_auc:.4f})")
+            st.session_state["authenticated"] = False
+            st.error("Invalid username or password")
 
-elif page == "📈 Analysis & Results":
-    st.markdown('<h2 class="sub-header">📈 Analysis & Results</h2>', unsafe_allow_html=True)
-    
-    # Check view permission
-    if not require_permission("view"):
-        st.stop()
-    
-    if st.session_state.model_results is None:
-        st.warning("⚠️ Please train models first.")
-    else:
-        model_data = st.session_state.model_results
-        trainer = model_data['trainer']
-        results = model_data['results']
-        target_col = model_data['target_col']
+    if "authenticated" not in st.session_state:
+        st.session_state["authenticated"] = False
+
+    if not st.session_state["authenticated"]:
+        st.title("🔐 ML Volatility Trading Platform - Login")
         
-        st.markdown("### Model Performance Analysis")
-        
-        # Performance metrics
-        col1, col2, col3 = st.columns(3)
-        
-        best_model = max(results.keys(), key=lambda k: results[k]['roc_auc'])
-        best_auc = results[best_model]['roc_auc']
-        n_models = len(results)
-        
-        with col1:
-            st.metric("Best ROC-AUC", f"{best_auc:.4f}")
+        col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
-            st.metric("Models Trained", n_models)
-        with col3:
-            st.metric("Best Model", best_model)
+            st.text_input("Username", key="username", placeholder="Enter username")
+            st.text_input("Password", type="password", key="password", placeholder="Enter password")
+            st.button("Login", on_click=password_entered)
+            
+            with st.expander("👤 Demo Accounts"):
+                st.write("**Available accounts:**")
+                st.write("• admin / admin123 - Full access")
+                st.write("• trader / trade456 - Trading focus") 
+                st.write("• analyst / analyze789 - Analysis focus")
+                st.write("• james / james2025 - Project owner")
         
-        # Detailed results
-        tabs = st.tabs(["📊 Performance Comparison", "🎯 Feature Importance", "📈 Predictions"])
-        
-        with tabs[0]:
-            st.markdown("#### ROC Curves")
-            
-            # Create ROC curve plot
-            fig = go.Figure()
-            
-            for model_name, result in results.items():
-                fpr, tpr, _ = roc_curve(trainer.y_test, result['probabilities'])
-                auc = result['roc_auc']
-                
-                fig.add_trace(go.Scatter(
-                    x=fpr, y=tpr,
-                    mode='lines',
-                    name=f'{model_name} (AUC = {auc:.3f})',
-                    line=dict(width=2)
-                ))
-            
-            # Add diagonal line
-            fig.add_trace(go.Scatter(
-                x=[0, 1], y=[0, 1],
-                mode='lines',
-                line=dict(dash='dash', color='gray'),
-                name='Random (AUC = 0.500)',
-                showlegend=True
-            ))
-            
-            fig.update_layout(
-                title='ROC Curves Comparison',
-                xaxis_title='False Positive Rate',
-                yaxis_title='True Positive Rate',
-                width=700,
-                height=500
-            )
-            
-            st.plotly_chart(fig, use_container_width=True)
-        
-        with tabs[1]:
-            st.markdown("#### Feature Importance")
-            
-            # Show feature importance for models that have it
-            for model_name, result in results.items():
-                if 'feature_importance' in result:
-                    st.markdown(f"**{model_name}**")
-                    
-                    importance_df = result['feature_importance'].head(15)
-                    
-                    fig = px.bar(
-                        importance_df,
-                        x='importance',
-                        y='feature',
-                        orientation='h',
-                        title=f'Top 15 Features - {model_name}'
-                    )
-                    fig.update_layout(height=500)
-                    st.plotly_chart(fig, use_container_width=True)
-                    
-                    # Show table
-                    st.dataframe(importance_df.head(10), use_container_width=True)
-        
-        with tabs[2]:
-            st.markdown("#### Prediction Analysis")
-            
-            # Prediction distributions
-            fig = go.Figure()
-            
-            for model_name, result in results.items():
-                fig.add_trace(go.Histogram(
-                    x=result['probabilities'],
-                    name=model_name,
-                    opacity=0.7,
-                    nbinsx=50
-                ))
-            
-            fig.add_vline(x=0.5, line_dash="dash", line_color="red", 
-                         annotation_text="Decision Threshold")
-            
-            fig.update_layout(
-                title='Prediction Probability Distributions',
-                xaxis_title='Predicted Probability',
-                yaxis_title='Count',
-                barmode='overlay'
-            )
-            
-            st.plotly_chart(fig, use_container_width=True)
+        return False
+    
+    return True
 
-# Footer
-st.markdown("---")
-st.markdown(f"""
-<div style="text-align: center; color: #666; padding: 1rem;">
-    <p>🔒 Secure ML Volatility Trading Model | User: {st.session_state.username}</p>
-    <p>Session Time: {st.session_state.get('login_time', 'Unknown')}</p>
-</div>
-""", unsafe_allow_html=True)
+def create_sample_datasets():
+    """Create sample datasets for demonstration"""
+    data_manager = DataManager()
+    
+    # Sample VIX/SPX volatility data
+    np.random.seed(42)
+    dates = pd.date_range('2024-01-01 09:30:00', periods=10000, freq='1min')
+    
+    sample_data = {
+        'DateTime': dates,
+        'VIX_Close': 20 + np.cumsum(np.random.randn(10000) * 0.1),
+        'SPX_Close': 4500 + np.cumsum(np.random.randn(10000) * 0.5),
+        'VIXY_Close': 15 + np.cumsum(np.random.randn(10000) * 0.08),
+        'HYG_Close': 80 + np.cumsum(np.random.randn(10000) * 0.02),
+        'TLT_Close': 95 + np.cumsum(np.random.randn(10000) * 0.03),
+        'Volume_VIX': np.random.randint(100000, 1000000, 10000),
+        'Volume_SPX': np.random.randint(500000, 5000000, 10000)
+    }
+    
+    df = pd.DataFrame(sample_data)
+    
+    # Add realistic correlations
+    df['VIX_Close'] = 20 + (4500 - df['SPX_Close']) * 0.01 + np.random.randn(10000) * 2
+    df['VIXY_Close'] = df['VIX_Close'] * 0.7 + np.random.randn(10000) * 1
+    
+    # Save as sample data
+    sample_file = BytesIO()
+    df.to_csv(sample_file, index=False)
+    sample_file.seek(0)
+    
+    return sample_file, df
+
+def main():
+    """Main application"""
+    
+    # Authentication check
+    if not check_password():
+        return
+    
+    # Initialize data manager
+    data_manager = DataManager()
+    
+    # Main title
+    st.title("📈 ML Volatility Trading Platform")
+    st.markdown(f"**Welcome, {st.session_state['current_user'].title()}!** | Role: {st.session_state['user_role'].title()}")
+    
+    # Sidebar navigation
+    with st.sidebar:
+        st.header("🗂️ Data Management")
+        
+        page = st.selectbox(
+            "Choose Section:",
+            ["📊 Data Overview", "📤 Upload Data", "📥 Browse Datasets", "🔬 Data Analysis", "⚙️ Admin Panel"]
+        )
+        
+        # User info
+        st.markdown("---")
+        st.markdown(f"**Current User:** {st.session_state['current_user']}")
+        if st.button("🚪 Logout"):
+            for key in st.session_state.keys():
+                del st.session_state[key]
+            st.rerun()
+    
+    # Page routing
+    if page == "📊 Data Overview":
+        show_data_overview(data_manager)
+    elif page == "📤 Upload Data":
+        show_upload_page(data_manager)
+    elif page == "📥 Browse Datasets":
+        show_browse_page(data_manager)
+    elif page == "🔬 Data Analysis":
+        show_analysis_page(data_manager)
+    elif page == "⚙️ Admin Panel":
+        show_admin_panel(data_manager)
+
+def show_data_overview(data_manager):
+    """Show overview of all available datasets"""
+    st.header("📊 Data Overview")
+    
+    # Statistics
+    shared_datasets = data_manager.get_shared_datasets()
+    user_datasets = data_manager.get_user_datasets(st.session_state['current_user'])
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Shared Datasets", len(shared_datasets))
+    with col2:
+        st.metric("Your Datasets", len(user_datasets))
+    with col3:
+        total_size = sum([d.get('file_size_mb', 0) for d in shared_datasets.values()])
+        total_size += sum([d.get('file_size_mb', 0) for d in user_datasets.values()])
+        st.metric("Total Data Size", f"{total_size:.1f} MB")
+    
+    # Recent uploads
+    st.subheader("📈 Recent Shared Datasets")
+    if shared_datasets:
+        for filename, metadata in list(shared_datasets.items())[-5:]:
+            with st.expander(f"📁 {metadata['name']}"):
+                col1, col2 = st.columns([2, 1])
+                with col1:
+                    st.write(f"**Description:** {metadata['description']}")
+                    st.write(f"**Uploader:** {metadata['uploader']}")
+                    st.write(f"**Shape:** {metadata['shape'][0]:,} rows × {metadata['shape'][1]} columns")
+                with col2:
+                    st.write(f"**Size:** {metadata['file_size_mb']:.1f} MB")
+                    st.write(f"**Date:** {metadata['upload_date'][:10]}")
+                    if st.button(f"Load {metadata['name']}", key=f"load_{filename}"):
+                        st.session_state['selected_dataset'] = ('shared', filename)
+                        st.success(f"Dataset '{metadata['name']}' loaded!")
+    else:
+        st.info("No shared datasets available. Upload the first one!")
+
+def show_upload_page(data_manager):
+    """Show data upload interface"""
+    st.header("📤 Upload Data")
+    
+    # Upload type selection
+    upload_type = st.radio(
+        "Upload Type:",
+        ["📊 Personal Dataset", "🌐 Shared Dataset (All Users)"],
+        help="Personal datasets are only visible to you. Shared datasets are visible to all users."
+    )
+    
+    is_shared = "Shared" in upload_type
+    
+    # Only admin can upload shared datasets
+    if is_shared and st.session_state['user_role'] != 'admin':
+        st.warning("Only administrators can upload shared datasets. You can upload personal datasets.")
+        is_shared = False
+    
+    st.markdown("---")
+    
+    # Upload form
+    with st.form("upload_form"):
+        st.subheader("📋 Dataset Information")
+        
+        dataset_name = st.text_input(
+            "Dataset Name *",
+            placeholder="e.g., VIX_SPX_Q1_2024",
+            help="Give your dataset a descriptive name"
+        )
+        
+        if is_shared:
+            description = st.text_area(
+                "Description *",
+                placeholder="Describe what this dataset contains, time period, features, etc.",
+                help="Help other users understand your dataset"
+            )
+        
+        uploaded_file = st.file_uploader(
+            "Choose CSV File *",
+            type=['csv'],
+            help="Upload a CSV file with your volatility trading data"
+        )
+        
+        # Data requirements
+        with st.expander("📋 Data Requirements"):
+            st.markdown("""
+            **Your CSV should include:**
+            - Timestamp/DateTime column
+            - Price data (VIX, SPX, VIXY, etc.)
+            - Volume data (optional)
+            - Clean, properly formatted data
+            
+            **Recommended columns:**
+            - DateTime, VIX_Close, SPX_Close, VIXY_Close, HYG_Close, TLT_Close
+            """)
+        
+        submitted = st.form_submit_button("🚀 Upload Dataset")
+        
+        if submitted:
+            if not dataset_name:
+                st.error("Please provide a dataset name")
+            elif is_shared and not description:
+                st.error("Please provide a description for shared datasets")
+            elif uploaded_file is None:
+                st.error("Please upload a CSV file")
+            else:
+                # Process upload
+                with st.spinner("Processing upload..."):
+                    if is_shared:
+                        success, message = data_manager.upload_shared_dataset(
+                            uploaded_file, dataset_name, description, 
+                            st.session_state['current_user']
+                        )
+                    else:
+                        success, message = data_manager.upload_user_dataset(
+                            uploaded_file, dataset_name, st.session_state['current_user']
+                        )
+                    
+                    if success:
+                        st.success(message)
+                        st.balloons()
+                    else:
+                        st.error(message)
+    
+    # Quick sample data creation
+    st.markdown("---")
+    st.subheader("🧪 Create Sample Dataset")
+    st.info("Don't have data? Create a sample volatility dataset for testing!")
+    
+    if st.button("📊 Generate Sample VIX/SPX Data"):
+        with st.spinner("Creating sample dataset..."):
+            sample_file, sample_df = create_sample_datasets()
+            
+            # Auto-upload sample data
+            success, message = data_manager.upload_user_dataset(
+                sample_file, "Sample_VIX_SPX_Data", st.session_state['current_user']
+            )
+            
+            if success:
+                st.success("Sample dataset created and uploaded!")
+                st.dataframe(sample_df.head())
+            else:
+                st.error(f"Error creating sample: {message}")
+
+def show_browse_page(data_manager):
+    """Show dataset browsing interface"""
+    st.header("📥 Browse Datasets")
+    
+    # Dataset type tabs
+    tab1, tab2 = st.tabs(["🌐 Shared Datasets", "👤 My Datasets"])
+    
+    with tab1:
+        st.subheader("🌐 Shared Datasets")
+        shared_datasets = data_manager.get_shared_datasets()
+        
+        if shared_datasets:
+            for filename, metadata in shared_datasets.items():
+                with st.container():
+                    col1, col2, col3 = st.columns([3, 1, 1])
+                    
+                    with col1:
+                        st.markdown(f"**📊 {metadata['name']}**")
+                        st.markdown(f"*{metadata['description']}*")
+                        st.markdown(f"👤 By: {metadata['uploader']} | 📅 {metadata['upload_date'][:10]}")
+                    
+                    with col2:
+                        st.markdown(f"**{metadata['shape'][0]:,}** rows")
+                        st.markdown(f"**{metadata['shape'][1]}** columns")
+                        st.markdown(f"**{metadata['file_size_mb']:.1f}** MB")
+                    
+                    with col3:
+                        if st.button("👁️ Preview", key=f"preview_shared_{filename}"):
+                            df = data_manager.load_shared_dataset(filename)
+                            if df is not None:
+                                st.dataframe(df.head(10))
+                        
+                        if st.button("📥 Load", key=f"load_shared_{filename}"):
+                            st.session_state['selected_dataset'] = ('shared', filename)
+                            st.success(f"Loaded: {metadata['name']}")
+                    
+                    st.markdown("---")
+        else:
+            st.info("No shared datasets available yet.")
+    
+    with tab2:
+        st.subheader("👤 My Personal Datasets")
+        user_datasets = data_manager.get_user_datasets(st.session_state['current_user'])
+        
+        if user_datasets:
+            for filename, metadata in user_datasets.items():
+                with st.container():
+                    col1, col2, col3 = st.columns([3, 1, 1])
+                    
+                    with col1:
+                        st.markdown(f"**📊 {metadata['name']}**")
+                        st.markdown(f"📅 Uploaded: {metadata['upload_date'][:10]}")
+                    
+                    with col2:
+                        st.markdown(f"**{metadata['shape'][0]:,}** rows")
+                        st.markdown(f"**{metadata['shape'][1]}** columns")
+                        st.markdown(f"**{metadata['file_size_mb']:.1f}** MB")
+                    
+                    with col3:
+                        if st.button("👁️ Preview", key=f"preview_user_{filename}"):
+                            df = data_manager.load_user_dataset(st.session_state['current_user'], filename)
+                            if df is not None:
+                                st.dataframe(df.head(10))
+                        
+                        col3a, col3b = st.columns(2)
+                        with col3a:
+                            if st.button("📥", key=f"load_user_{filename}", help="Load dataset"):
+                                st.session_state['selected_dataset'] = ('user', filename)
+                                st.success(f"Loaded: {metadata['name']}")
+                        
+                        with col3b:
+                            if st.button("🗑️", key=f"delete_user_{filename}", help="Delete dataset"):
+                                success, message = data_manager.delete_dataset('user', st.session_state['current_user'], filename)
+                                if success:
+                                    st.success(message)
+                                    st.rerun()
+                                else:
+                                    st.error(message)
+                    
+                    st.markdown("---")
+        else:
+            st.info("You haven't uploaded any personal datasets yet.")
+
+def show_analysis_page(data_manager):
+    """Show data analysis interface"""
+    st.header("🔬 Data Analysis")
+    
+    # Check if dataset is loaded
+    if 'selected_dataset' not in st.session_state:
+        st.warning("Please load a dataset first from the Browse Datasets page.")
+        return
+    
+    dataset_type, filename = st.session_state['selected_dataset']
+    
+    # Load dataset
+    if dataset_type == 'shared':
+        df = data_manager.load_shared_dataset(filename)
+        metadata = data_manager.get_shared_datasets()[filename]
+    else:
+        df = data_manager.load_user_dataset(st.session_state['current_user'], filename)
+        metadata = data_manager.get_user_datasets(st.session_state['current_user'])[filename]
+    
+    if df is None:
+        st.error("Could not load dataset.")
+        return
+    
+    st.success(f"📊 Analyzing: **{metadata['name']}**")
+    
+    # Basic info
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Rows", f"{len(df):,}")
+    with col2:
+        st.metric("Columns", len(df.columns))
+    with col3:
+        st.metric("Memory", f"{df.memory_usage(deep=True).sum() / 1024**2:.1f} MB")
+    with col4:
+        missing_pct = (df.isnull().sum().sum() / (len(df) * len(df.columns))) * 100
+        st.metric("Missing Data", f"{missing_pct:.1f}%")
+    
+    # Analysis tabs
+    tab1, tab2, tab3, tab4 = st.tabs(["📋 Data Preview", "📊 Visualizations", "🔍 Missing Data", "📈 Correlations"])
+    
+    with tab1:
+        st.subheader("📋 Data Preview")
+        
+        # Data preview
+        st.dataframe(df.head(20))
+        
+        # Column info
+        st.subheader("📊 Column Information")
+        col_info = pd.DataFrame({
+            'Column': df.columns,
+            'Type': df.dtypes,
+            'Non-Null': df.count(),
+            'Missing': df.isnull().sum(),
+            'Missing %': (df.isnull().sum() / len(df) * 100).round(2)
+        })
+        st.dataframe(col_info)
+    
+    with tab2:
+        st.subheader("📊 Data Visualizations")
+        
+        # Select numeric columns
+        numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+        
+        if numeric_cols:
+            # Time series plots
+            if len(numeric_cols) > 0:
+                selected_cols = st.multiselect(
+                    "Select columns to plot:",
+                    numeric_cols,
+                    default=numeric_cols[:3] if len(numeric_cols) >= 3 else numeric_cols
+                )
+                
+                if selected_cols:
+                    fig = go.Figure()
+                    for col in selected_cols:
+                        fig.add_trace(go.Scatter(
+                            y=df[col].head(1000),  # Limit for performance
+                            name=col,
+                            mode='lines'
+                        ))
+                    
+                    fig.update_layout(
+                        title="Time Series Plot",
+                        xaxis_title="Time Index",
+                        yaxis_title="Value",
+                        height=500
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+            
+            # Distribution plots
+            st.subheader("📊 Distributions")
+            if len(numeric_cols) > 0:
+                selected_col = st.selectbox("Select column for distribution:", numeric_cols)
+                
+                fig = px.histogram(df, x=selected_col, title=f"Distribution of {selected_col}")
+                st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No numeric columns found for visualization.")
+    
+    with tab3:
+        st.subheader("🔍 Missing Data Analysis")
+        
+        missing_data = df.isnull().sum()
+        missing_pct = (missing_data / len(df)) * 100
+        
+        if missing_data.sum() > 0:
+            missing_df = pd.DataFrame({
+                'Column': missing_data.index,
+                'Missing Count': missing_data.values,
+                'Missing %': missing_pct.values
+            }).sort_values('Missing %', ascending=False)
+            
+            # Filter only columns with missing data
+            missing_df = missing_df[missing_df['Missing Count'] > 0]
+            
+            if not missing_df.empty:
+                st.dataframe(missing_df)
+                
+                # Missing data heatmap
+                fig = px.bar(missing_df, x='Column', y='Missing %', 
+                           title="Missing Data by Column")
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.success("No missing data found!")
+        else:
+            st.success("No missing data found!")
+    
+    with tab4:
+        st.subheader("📈 Correlation Analysis")
+        
+        if len(numeric_cols) > 1:
+            corr_matrix = df[numeric_cols].corr()
+            
+            fig = px.imshow(
+                corr_matrix,
+                title="Correlation Matrix",
+                color_continuous_scale="RdBu",
+                aspect="auto"
+            )
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # High correlations
+            st.subheader("🔍 High Correlations (>0.7)")
+            high_corr = []
+            for i in range(len(corr_matrix.columns)):
+                for j in range(i+1, len(corr_matrix.columns)):
+                    corr_val = corr_matrix.iloc[i, j]
+                    if abs(corr_val) > 0.7:
+                        high_corr.append({
+                            'Variable 1': corr_matrix.columns[i],
+                            'Variable 2': corr_matrix.columns[j],
+                            'Correlation': corr_val
+                        })
+            
+            if high_corr:
+                high_corr_df = pd.DataFrame(high_corr).sort_values('Correlation', key=abs, ascending=False)
+                st.dataframe(high_corr_df)
+            else:
+                st.info("No high correlations (>0.7) found.")
+        else:
+            st.info("Need at least 2 numeric columns for correlation analysis.")
+
+def show_admin_panel(data_manager):
+    """Show admin panel (admin only)"""
+    st.header("⚙️ Admin Panel")
+    
+    if st.session_state['user_role'] != 'admin':
+        st.error("Access denied. Admin privileges required.")
+        return
+    
+    # System statistics
+    st.subheader("📊 System Statistics")
+    
+    shared_datasets = data_manager.get_shared_datasets()
+    all_user_datasets = data_manager.metadata.get("user_datasets", {})
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Total Users", len(all_user_datasets))
+    with col2:
+        st.metric("Shared Datasets", len(shared_datasets))
+    with col3:
+        total_user_datasets = sum(len(datasets) for datasets in all_user_datasets.values())
+        st.metric("User Datasets", total_user_datasets)
+    
+    # Manage shared datasets
+    st.subheader("🗂️ Manage Shared Datasets")
+    
+    if shared_datasets:
+        for filename, metadata in shared_datasets.items():
+            with st.expander(f"📁 {metadata['name']}"):
+                col1, col2 = st.columns([3, 1])
+                
+                with col1:
+                    st.write(f"**Uploader:** {metadata['uploader']}")
+                    st.write(f"**Description:** {metadata['description']}")
+                    st.write(f"**Upload Date:** {metadata['upload_date']}")
+                    st.write(f"**Size:** {metadata['file_size_mb']:.1f} MB")
+                
+                with col2:
+                    if st.button("🗑️ Delete", key=f"admin_delete_{filename}"):
+                        success, message = data_manager.delete_dataset('shared', None, filename)
+                        if success:
+                            st.success(message)
+                            st.rerun()
+                        else:
+                            st.error(message)
+    else:
+        st.info("No shared datasets to manage.")
+    
+    # User activity
+    st.subheader("👥 User Activity")
+    
+    if all_user_datasets:
+        user_stats = []
+        for username, datasets in all_user_datasets.items():
+            total_size = sum(d.get('file_size_mb', 0) for d in datasets.values())
+            user_stats.append({
+                'User': username,
+                'Datasets': len(datasets),
+                'Total Size (MB)': total_size
+            })
+        
+        user_stats_df = pd.DataFrame(user_stats).sort_values('Datasets', ascending=False)
+        st.dataframe(user_stats_df)
+    else:
+        st.info("No user activity yet.")
+
+if __name__ == "__main__":
+    main()
