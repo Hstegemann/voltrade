@@ -536,6 +536,115 @@ page = st.sidebar.selectbox(
     ["📊 Data Processing", "🔧 Feature Engineering", "🤖 Model Training", "📈 Analysis & Results"]
 )
 
+# =====================================================================
+# PROJECT PROGRESS TRACKER
+# =====================================================================
+
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 📋 **Project Progress**")
+
+# Define project phases based on your original outline
+project_phases = {
+    "Phase 1: Environment Setup": {
+        "status": "✅",
+        "items": [
+            "✅ Python IDE (Streamlit App)",
+            "✅ Required packages",
+            "✅ Data access ready",
+            "✅ Authentication system"
+        ]
+    },
+    "Phase 2: Data Pipeline": {
+        "status": "✅",
+        "items": [
+            "✅ Futures data processor",
+            "✅ Multi-asset merger",
+            "✅ Timezone handling",
+            "✅ Rollover logic"
+        ]
+    },
+    "Phase 3: Feature Engineering": {
+        "status": "🔄" if st.session_state.get('engineered_features') is None else "✅",
+        "items": [
+            f"{'✅' if st.session_state.get('processed_data') is not None else '⏳'} Data loaded",
+            f"{'✅' if st.session_state.get('engineered_features') is not None else '⏳'} Technical indicators",
+            f"{'✅' if st.session_state.get('engineered_features') is not None else '⏳'} Cross-asset features",
+            f"{'✅' if st.session_state.get('engineered_features') is not None else '⏳'} Response variables"
+        ]
+    },
+    "Phase 4: Model Development": {
+        "status": "🔄" if st.session_state.get('model_results') is None else "✅",
+        "items": [
+            f"{'✅' if st.session_state.get('model_results') is not None else '⏳'} Logistic Regression",
+            f"{'✅' if st.session_state.get('model_results') is not None else '⏳'} Random Forest",
+            f"{'✅' if st.session_state.get('model_results') is not None else '⏳'} XGBoost (optional)",
+            f"{'✅' if st.session_state.get('model_results') is not None else '⏳'} Model evaluation"
+        ]
+    },
+    "Phase 5: Backtesting": {
+        "status": "⏳",
+        "items": [
+            "⏳ Signal generation",
+            "⏳ Historical testing",
+            "⏳ Performance metrics",
+            "⏳ Risk analysis"
+        ]
+    },
+    "Phase 6: Live Trading": {
+        "status": "⏳",
+        "items": [
+            "⏳ Real-time data feed",
+            "⏳ Position sizing",
+            "⏳ Risk management",
+            "⏳ Paper trading"
+        ]
+    }
+}
+
+# Show current phase progress
+current_phase = None
+for phase_name, phase_data in project_phases.items():
+    if phase_data["status"] == "🔄":
+        current_phase = phase_name
+        break
+
+if current_phase:
+    st.sidebar.markdown(f"**🎯 Current Focus:** {current_phase.split(':')[1].strip()}")
+
+# Expandable progress tracker
+with st.sidebar.expander("📊 Detailed Progress", expanded=False):
+    for phase_name, phase_data in project_phases.items():
+        st.markdown(f"**{phase_data['status']} {phase_name}**")
+        for item in phase_data["items"]:
+            st.markdown(f"  {item}")
+        st.markdown("")
+
+# Quick stats
+total_items = sum(len(phase["items"]) for phase in project_phases.values())
+completed_items = sum(
+    len([item for item in phase["items"] if item.startswith("✅")]) 
+    for phase in project_phases.values()
+)
+progress_pct = (completed_items / total_items) * 100
+
+st.sidebar.markdown(f"**Overall Progress:** {completed_items}/{total_items} ({progress_pct:.0f}%)")
+st.sidebar.progress(progress_pct / 100)
+
+# Next steps reminder
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 🎯 **Next Steps**")
+
+if st.session_state.get('processed_data') is None:
+    st.sidebar.markdown("1. 📊 Generate or upload data")
+elif st.session_state.get('engineered_features') is None:
+    st.sidebar.markdown("1. 🔧 Run feature engineering")
+elif st.session_state.get('model_results') is None:
+    st.sidebar.markdown("1. 🤖 Train ML models")
+else:
+    st.sidebar.markdown("1. 📈 Analyze results")
+    st.sidebar.markdown("2. 🔄 Implement backtesting")
+    st.sidebar.markdown("3. 📈 Deploy for live trading")
+
 # Show logout option
 show_logout_option()
 
