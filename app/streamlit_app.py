@@ -21,6 +21,13 @@ from sklearn.metrics import classification_report, roc_auc_score, confusion_matr
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+# Import authentication configuration
+try:
+    from auth_config import FINAL_USERS, USER_PERMISSIONS, SHOW_DEMO_CREDENTIALS, PRODUCTION_MODE
+except ImportError:
+    st.error("❌ auth_config.py not found! Please create the authentication configuration file.")
+    st.stop()
+
 warnings.filterwarnings('ignore')
 
 # Set page config
@@ -32,28 +39,15 @@ st.set_page_config(
 )
 
 # =====================================================================
-# AUTHENTICATION SYSTEM
+# AUTHENTICATION SYSTEM (Updated to use auth_config.py)
 # =====================================================================
 
 class AuthenticationManager:
-    """Simple authentication system for Streamlit"""
+    """Authentication system using auth_config.py"""
     
     def __init__(self):
-        # Define users and passwords (hashed)
-        # In production, store these in a secure database or config file
-        self.users = {
-            "admin": self.hash_password("your_password_here"),
-            "trader": self.hash_password("trading123"),
-            "analyst": self.hash_password("analysis456"),
-            # Add more users as needed
-        }
-        
-        # User permissions
-        self.permissions = {
-            "admin": ["upload", "train", "download", "view"],
-            "trader": ["upload", "train", "view"],
-            "analyst": ["view", "download"]
-        }
+        self.users = FINAL_USERS
+        self.permissions = USER_PERMISSIONS
     
     def hash_password(self, password):
         """Hash password using SHA256"""
@@ -101,21 +95,27 @@ def show_login_page():
                     st.session_state.authenticated = True
                     st.session_state.username = username
                     st.session_state.permissions = auth.get_user_permissions(username)
+                    st.session_state.login_time = datetime.now()
                     st.success("✅ Login successful!")
                     st.rerun()
                 else:
                     st.error("❌ Invalid username or password")
         
-        # Show demo credentials (remove in production)
-        with st.expander("Demo Credentials", expanded=False):
-            st.markdown("""
-            **Demo accounts:**
-            - **admin** / your_password_here (full access)
-            - **trader** / trading123 (upload & train)
-            - **analyst** / analysis456 (view only)
-            
-            *Change these in production!*
-            """)
+        # Show demo credentials only if enabled in config
+        if SHOW_DEMO_CREDENTIALS:
+            with st.expander("Demo Credentials", expanded=False):
+                st.markdown("""
+                **Demo accounts:**
+                - **admin** / VixTrading2025! (full access)
+                - **trader** / TradingSecure123 (upload & train)
+                - **analyst** / AnalysisView456 (view only)
+                - **james** / YourPersonalPass (full access)
+                
+                *⚠️ Change these passwords in auth_config.py before production!*
+                """)
+        
+        if PRODUCTION_MODE:
+            st.info("🔒 Production mode - Contact administrator for access")
 
 def show_logout_option():
     """Show logout option in sidebar"""
@@ -126,6 +126,11 @@ def show_logout_option():
     perms = st.session_state.get('permissions', [])
     st.sidebar.markdown(f"🔑 **Permissions:** {', '.join(perms)}")
     
+    # Show login time
+    if 'login_time' in st.session_state:
+        login_time = st.session_state.login_time
+        st.sidebar.markdown(f"🕐 **Login time:** {login_time.strftime('%H:%M:%S')}")
+    
     if st.sidebar.button("🚪 Logout"):
         # Clear all session state
         for key in list(st.session_state.keys()):
@@ -133,7 +138,7 @@ def show_logout_option():
         st.rerun()
 
 def check_permission(permission):
-    """Decorator/function to check if user has permission"""
+    """Check if user has permission"""
     auth = AuthenticationManager()
     username = st.session_state.get('username', '')
     return auth.has_permission(username, permission)
@@ -147,7 +152,7 @@ def require_permission(permission):
     return True
 
 # =====================================================================
-# EXISTING CLASSES (same as before)
+# EXISTING CLASSES (VIX Futures, Feature Engineer, Model Trainer)
 # =====================================================================
 
 class VIXFuturesSimplifier:
@@ -571,6 +576,40 @@ if page == "📊 Data Processing":
             # Show summary stats
             st.markdown("**Summary Statistics:**")
             st.dataframe(demo_data.describe())
+            
+            # Plot the data
+            fig = make_subplots(
+                rows=2, cols=2,
+                subplot_titles=['VIX Level', 'VIXY Price', 'SPX Index', 'HYG vs TLT'],
+                vertical_spacing=0.1
+            )
+            
+            # Sample data for plotting (last 1000 points)
+            plot_data = demo_data.tail(1000)
+            
+            fig.add_trace(
+                go.Scatter(x=plot_data.index, y=plot_data['VIX_Close'], name='VIX'),
+                row=1, col=1
+            )
+            fig.add_trace(
+                go.Scatter(x=plot_data.index, y=plot_data['VIXY_Close'], name='VIXY'),
+                row=1, col=2
+            )
+            fig.add_trace(
+                go.Scatter(x=plot_data.index, y=plot_data['SPX_Close'], name='SPX'),
+                row=2, col=1
+            )
+            fig.add_trace(
+                go.Scatter(x=plot_data.index, y=plot_data['HYG_Close'], name='HYG'),
+                row=2, col=2
+            )
+            fig.add_trace(
+                go.Scatter(x=plot_data.index, y=plot_data['TLT_Close'], name='TLT'),
+                row=2, col=2
+            )
+            
+            fig.update_layout(height=600, showlegend=False)
+            st.plotly_chart(fig, use_container_width=True)
     
     elif data_source == "📁 Upload Your Files":
         # Check upload permission
@@ -635,7 +674,7 @@ if page == "📊 Data Processing":
             st.info("No CSV files found in current directory.")
 
 # =====================================================================
-# PAGE 2: FEATURE ENGINEERING (with permission check)
+# PAGE 2: FEATURE ENGINEERING
 # =====================================================================
 
 elif page == "🔧 Feature Engineering":
@@ -698,6 +737,29 @@ elif page == "🔧 Feature Engineering":
                 st.metric("New Features", len(feature_cols))
             with col3:
                 st.metric("Response Variables", len(response_cols))
+            
+            # Show feature categories
+            st.markdown("**Feature Categories:**")
+            categories = {
+                'Returns': len([c for c in feature_cols if 'return' in c]),
+                'Technical Indicators': len([c for c in feature_cols if any(x in c for x in ['RSI', 'SMA', 'BB'])]),
+                'Cross-Asset': len([c for c in feature_cols if any(x in c for x in ['ratio', 'spread'])]),
+                'Regime': len([c for c in feature_cols if 'regime' in c]),
+            }
+            
+            cat_df = pd.DataFrame(list(categories.items()), columns=['Category', 'Count'])
+            st.dataframe(cat_df, use_container_width=True)
+            
+            # Response variable analysis
+            if response_cols:
+                st.markdown("**Response Variable Analysis:**")
+                
+                for resp_col in response_cols[:3]:  # Show first 3
+                    if 'direction' in resp_col:
+                        valid_data = engineered_data[resp_col].dropna()
+                        if len(valid_data) > 0:
+                            up_pct = valid_data.mean() * 100
+                            st.write(f"**{resp_col}**: {up_pct:.1f}% up moves, {100-up_pct:.1f}% down moves")
 
 # =====================================================================
 # PAGE 3: MODEL TRAINING (with permission check)
@@ -746,17 +808,77 @@ elif page == "🤖 Model Training":
                     # Prepare data
                     n_samples, n_features = trainer.prepare_data(data, target_col, test_size)
                     
-                    # Train models
-                    results = trainer.train_models()
+                    # Check class balance
+                    train_balance = trainer.y_train.value_counts()
+                    test_balance = trainer.y_test.value_counts()
                     
-                    # Store results
-                    st.session_state.model_results = {
-                        'trainer': trainer,
-                        'results': results,
-                        'target_col': target_col
-                    }
+                    st.markdown("**Data Preparation Summary:**")
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Total Samples", n_samples)
+                    with col2:
+                        st.metric("Features", n_features)
+                    with col3:
+                        st.metric("Train/Test Split", f"{len(trainer.X_train)}/{len(trainer.X_test)}")
                     
-                    st.success("✅ Model training completed!")
+                    # Show class distribution
+                    st.markdown("**Class Distribution:**")
+                    dist_col1, dist_col2 = st.columns(2)
+                    
+                    with dist_col1:
+                        st.write("**Training Set:**")
+                        st.write(f"Up: {train_balance.get(1, 0):,} ({train_balance.get(1, 0)/len(trainer.y_train)*100:.1f}%)")
+                        st.write(f"Down: {train_balance.get(0, 0):,} ({train_balance.get(0, 0)/len(trainer.y_train)*100:.1f}%)")
+                    
+                    with dist_col2:
+                        st.write("**Test Set:**")
+                        st.write(f"Up: {test_balance.get(1, 0):,} ({test_balance.get(1, 0)/len(trainer.y_test)*100:.1f}%)")
+                        st.write(f"Down: {test_balance.get(0, 0):,} ({test_balance.get(0, 0)/len(trainer.y_test)*100:.1f}%)")
+                    
+                    # Check if we have both classes
+                    if len(train_balance) < 2:
+                        st.error("❌ Training set has only one class! This usually means:")
+                        st.write("- The target variable is not properly constructed")
+                        st.write("- Try a different time horizon")
+                        st.write("- Check the forward-looking calculation")
+                        
+                        # Show diagnostic info
+                        target_data = data[target_col].dropna()
+                        st.write(f"Target variable `{target_col}` distribution:")
+                        st.write(target_data.value_counts())
+                        
+                    else:
+                        # Train models
+                        results = trainer.train_models()
+                        
+                        # Store results
+                        st.session_state.model_results = {
+                            'trainer': trainer,
+                            'results': results,
+                            'target_col': target_col
+                        }
+                        
+                        st.success("✅ Model training completed!")
+                        
+                        # Show results summary
+                        st.markdown("**Model Performance Summary:**")
+                        
+                        perf_data = []
+                        for model_name, result in results.items():
+                            perf_data.append({
+                                'Model': model_name,
+                                'ROC-AUC': f"{result['roc_auc']:.4f}",
+                                'Accuracy': f"{(result['predictions'] == trainer.y_test).mean():.4f}"
+                            })
+                        
+                        perf_df = pd.DataFrame(perf_data)
+                        st.dataframe(perf_df, use_container_width=True)
+                        
+                        # Best model
+                        best_model = max(results.keys(), key=lambda k: results[k]['roc_auc'])
+                        best_auc = results[best_model]['roc_auc']
+                        
+                        st.markdown(f"**🏆 Best Model**: {best_model} (ROC-AUC: {best_auc:.4f})")
 
 # =====================================================================
 # PAGE 4: ANALYSIS & RESULTS (with permission check)
@@ -793,69 +915,158 @@ elif page == "📈 Analysis & Results":
         with col3:
             st.metric("Best Model", best_model)
         
-        # Show ROC curves
-        fig = go.Figure()
+        # Detailed results
+        tabs = st.tabs(["📊 Performance Comparison", "🎯 Feature Importance", "📈 Predictions", "💾 Download Models"])
         
-        for model_name, result in results.items():
-            fpr, tpr, _ = roc_curve(trainer.y_test, result['probabilities'])
-            auc = result['roc_auc']
+        with tabs[0]:
+            st.markdown("#### ROC Curves")
             
-            fig.add_trace(go.Scatter(
-                x=fpr, y=tpr,
-                mode='lines',
-                name=f'{model_name} (AUC = {auc:.3f})',
-                line=dict(width=2)
-            ))
-        
-        fig.add_trace(go.Scatter(
-            x=[0, 1], y=[0, 1],
-            mode='lines',
-            line=dict(dash='dash', color='gray'),
-            name='Random (AUC = 0.500)'
-        ))
-        
-        fig.update_layout(
-            title='ROC Curves Comparison',
-            xaxis_title='False Positive Rate',
-            yaxis_title='True Positive Rate'
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
-        
-        # Download section (with permission check)
-        if check_permission("download"):
-            st.markdown("### 💾 Download Models")
+            # Create ROC curve plot
+            fig = go.Figure()
             
             for model_name, result in results.items():
-                col1, col2 = st.columns([3, 1])
+                fpr, tpr, _ = roc_curve(trainer.y_test, result['probabilities'])
+                auc = result['roc_auc']
                 
-                with col1:
-                    st.write(f"**{model_name}**: ROC-AUC = {result['roc_auc']:.4f}")
-                
-                with col2:
-                    model_data = {
-                        'model': result['model'],
-                        'scaler': trainer.scaler,
-                        'feature_names': trainer.feature_names,
-                        'target_col': target_col,
-                        'performance': result['roc_auc']
-                    }
+                fig.add_trace(go.Scatter(
+                    x=fpr, y=tpr,
+                    mode='lines',
+                    name=f'{model_name} (AUC = {auc:.3f})',
+                    line=dict(width=2)
+                ))
+            
+            # Add diagonal line
+            fig.add_trace(go.Scatter(
+                x=[0, 1], y=[0, 1],
+                mode='lines',
+                line=dict(dash='dash', color='gray'),
+                name='Random (AUC = 0.500)',
+                showlegend=True
+            ))
+            
+            fig.update_layout(
+                title='ROC Curves Comparison',
+                xaxis_title='False Positive Rate',
+                yaxis_title='True Positive Rate',
+                width=700,
+                height=500
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+        
+        with tabs[1]:
+            st.markdown("#### Feature Importance")
+            
+            # Show feature importance for models that have it
+            for model_name, result in results.items():
+                if 'feature_importance' in result:
+                    st.markdown(f"**{model_name}**")
                     
-                    model_pickle = pickle.dumps(model_data)
+                    importance_df = result['feature_importance'].head(15)
                     
-                    st.download_button(
-                        label="📥 Download",
-                        data=model_pickle,
-                        file_name=f"{model_name.lower().replace(' ', '_')}_model.pkl",
-                        mime="application/octet-stream"
+                    fig = px.bar(
+                        importance_df,
+                        x='importance',
+                        y='feature',
+                        orientation='h',
+                        title=f'Top 15 Features - {model_name}'
                     )
-        else:
-            st.info("🔒 Download permission required to access trained models.")
+                    fig.update_layout(height=500)
+                    st.plotly_chart(fig, use_container_width=True)
+                    
+                    # Show table
+                    st.dataframe(importance_df.head(10), use_container_width=True)
+        
+        with tabs[2]:
+            st.markdown("#### Prediction Analysis")
+            
+            # Prediction distributions
+            fig = go.Figure()
+            
+            for model_name, result in results.items():
+                fig.add_trace(go.Histogram(
+                    x=result['probabilities'],
+                    name=model_name,
+                    opacity=0.7,
+                    nbinsx=50
+                ))
+            
+            fig.add_vline(x=0.5, line_dash="dash", line_color="red", 
+                         annotation_text="Decision Threshold")
+            
+            fig.update_layout(
+                title='Prediction Probability Distributions',
+                xaxis_title='Predicted Probability',
+                yaxis_title='Count',
+                barmode='overlay'
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+        
+        with tabs[3]:
+            # Check download permission
+            if not require_permission("download"):
+                st.error("❌ Download permission required to access trained models.")
+            else:
+                st.markdown("#### Download Trained Models")
+                
+                # Model download
+                for model_name, result in results.items():
+                    col1, col2 = st.columns([3, 1])
+                    
+                    with col1:
+                        st.write(f"**{model_name}**")
+                        st.write(f"ROC-AUC: {result['roc_auc']:.4f}")
+                    
+                    with col2:
+                        # Create model pickle
+                        model_data = {
+                            'model': result['model'],
+                            'scaler': trainer.scaler,
+                            'feature_names': trainer.feature_names,
+                            'target_col': target_col,
+                            'performance': result['roc_auc']
+                        }
+                        
+                        model_pickle = pickle.dumps(model_data)
+                        
+                        st.download_button(
+                            label="📥 Download",
+                            data=model_pickle,
+                            file_name=f"{model_name.lower().replace(' ', '_')}_model.pkl",
+                            mime="application/octet-stream"
+                        )
+                
+                # Results summary download
+                st.markdown("#### Download Results Summary")
+                
+                summary = {
+                    'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    'target_variable': target_col,
+                    'user': st.session_state.username,
+                    'models': {}
+                }
+                
+                for model_name, result in results.items():
+                    summary['models'][model_name] = {
+                        'roc_auc': result['roc_auc'],
+                        'accuracy': float((result['predictions'] == trainer.y_test).mean())
+                    }
+                
+                summary_json = json.dumps(summary, indent=2)
+                
+                st.download_button(
+                    label="📊 Download Results Summary",
+                    data=summary_json,
+                    file_name="model_results_summary.json",
+                    mime="application/json"
+                )
 
 # Footer
 st.markdown("---")
-st.markdown("""
+st.markdown(f"""
 <div style="text-align: center; color: #666; padding: 1rem;">
-    <p>🔒 Secure ML Volatility Trading Model | Authenticated Access</p>
+    <p>🔒 Secure ML Volatility Trading Model | User: {st.session_state.username}</p>
+    <p>Production Mode: {'✅' if PRODUCTION_MODE else '❌'} | Session Time: {st.session_state.get('login_time', 'Unknown')}</p>
 </div>
 """, unsafe_allow_html=True)
