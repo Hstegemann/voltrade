@@ -663,118 +663,41 @@ if 'model_results' not in st.session_state:
 if page == "📊 Data Processing":
     st.markdown('<h2 class="sub-header">📊 Data Processing</h2>', unsafe_allow_html=True)
     
-    # Data source selection
-    data_source = st.radio(
-        "Select Data Source:",
-        ["🎲 Generate Demo Data", "📁 Upload Your Files"]
+    st.markdown("### Upload Your Processed Data")
+    # Check upload permission
+    if not require_permission("upload"):
+        st.stop()
+        
+    uploaded_file = st.file_uploader(
+        "Upload your merged/processed CSV file", 
+        type=['csv'],
+        help="Upload output from your VIX futures processor or multi-asset merger"
     )
     
-    if data_source == "🎲 Generate Demo Data":
-        st.markdown("""
-        <div class="info-box">
-        <h4>Demo Data Generation</h4>
-        <p>This will create synthetic market data for testing:</p>
-        <ul>
-            <li>VIX spot prices (mean-reverting)</li>
-            <li>VIXY ETF prices (with realistic decay)</li>
-            <li>SPX index prices</li>
-            <li>HYG and TLT bond ETF prices</li>
-        </ul>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            n_points = st.slider("Number of data points", 1000, 50000, 10000, 1000)
-        with col2:
-            st.metric("Approximate timespan", f"{n_points / 390:.1f} trading days")
-        
-        if st.button("🎲 Generate Demo Data", type="primary"):
-            with st.spinner("Generating synthetic market data..."):
-                simplifier = VIXFuturesSimplifier()
-                demo_data = simplifier.create_synthetic_data(n_points)
-                st.session_state.processed_data = demo_data
-                
-            st.success(f"✅ Generated {len(demo_data):,} rows of demo data!")
+    if uploaded_file is not None:
+        try:
+            # Read the uploaded file
+            data = pd.read_csv(uploaded_file, index_col=0, parse_dates=True)
+            st.session_state.processed_data = data
+            
+            st.success(f"✅ Uploaded {len(data):,} rows of data!")
             
             # Show preview
             st.markdown("**Data Preview:**")
-            st.dataframe(demo_data.head(10))
+            st.dataframe(data.head(10))
             
-            # Show summary stats
-            st.markdown("**Summary Statistics:**")
-            st.dataframe(demo_data.describe())
+            # Show column info
+            st.markdown("**Available Columns:**")
+            col_info = pd.DataFrame({
+                'Column': data.columns,
+                'Type': data.dtypes,
+                'Non-Null Count': data.count(),
+                'Null %': (data.isnull().sum() / len(data) * 100).round(1)
+            })
+            st.dataframe(col_info)
             
-            # Plot the data
-            fig = make_subplots(
-                rows=2, cols=2,
-                subplot_titles=['VIX Level', 'VIXY Price', 'SPX Index', 'HYG vs TLT']
-            )
-            
-            # Sample data for plotting (last 1000 points)
-            plot_data = demo_data.tail(1000)
-            
-            fig.add_trace(
-                go.Scatter(x=plot_data.index, y=plot_data['VIX_Close'], name='VIX'),
-                row=1, col=1
-            )
-            fig.add_trace(
-                go.Scatter(x=plot_data.index, y=plot_data['VIXY_Close'], name='VIXY'),
-                row=1, col=2
-            )
-            fig.add_trace(
-                go.Scatter(x=plot_data.index, y=plot_data['SPX_Close'], name='SPX'),
-                row=2, col=1
-            )
-            fig.add_trace(
-                go.Scatter(x=plot_data.index, y=plot_data['HYG_Close'], name='HYG'),
-                row=2, col=2
-            )
-            fig.add_trace(
-                go.Scatter(x=plot_data.index, y=plot_data['TLT_Close'], name='TLT'),
-                row=2, col=2
-            )
-            
-            fig.update_layout(height=600, showlegend=False)
-            st.plotly_chart(fig, use_container_width=True)
-    
-    elif data_source == "📁 Upload Your Files":
-        # Check upload permission
-        if not require_permission("upload"):
-            st.stop()
-            
-        st.markdown("### Upload Your Processed Data")
-        
-        uploaded_file = st.file_uploader(
-            "Upload your merged/processed CSV file", 
-            type=['csv'],
-            help="Upload output from your VIX futures processor or multi-asset merger"
-        )
-        
-        if uploaded_file is not None:
-            try:
-                # Read the uploaded file
-                data = pd.read_csv(uploaded_file, index_col=0, parse_dates=True)
-                st.session_state.processed_data = data
-                
-                st.success(f"✅ Uploaded {len(data):,} rows of data!")
-                
-                # Show preview
-                st.markdown("**Data Preview:**")
-                st.dataframe(data.head(10))
-                
-                # Show column info
-                st.markdown("**Available Columns:**")
-                col_info = pd.DataFrame({
-                    'Column': data.columns,
-                    'Type': data.dtypes,
-                    'Non-Null Count': data.count(),
-                    'Null %': (data.isnull().sum() / len(data) * 100).round(1)
-                })
-                st.dataframe(col_info)
-                
-            except Exception as e:
-                st.error(f"Error loading file: {str(e)}")
+        except Exception as e:
+            st.error(f"Error loading file: {str(e)}")
 
 elif page == "🔧 Feature Engineering":
     st.markdown('<h2 class="sub-header">🔧 Feature Engineering</h2>', unsafe_allow_html=True)
